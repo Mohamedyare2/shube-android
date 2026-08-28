@@ -1,18 +1,16 @@
-# Admin Dashboard
+# Android build files
+android/.gradle/
+android/app/build/
+android/local.properties
+android/captures/
+android/.cxx/
+
+# Admin dashboard
 admin-dashboard/node_modules/
 admin-dashboard/dist/
-admin-dashboard/.env
-admin-dashboard/.env.local
 
-# Android Build outputs
-android/build/
-android/app/build/
-android/.gradle/
-android/local.properties
+# Environment files
+.env
+.env.local
 *.keystore
 *.jks
-
-# General
-.DS_Store
-Thumbs.db
-*.log
