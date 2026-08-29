@@ -26,9 +26,11 @@ export default function DevicesPage() {
       .select(`*, operator:operators(username, profile:profiles!operators_profile_id_fkey(full_name))`)
       .order('last_seen', { ascending: false, nullsFirst: false })
 
-    // Operators only see their own devices
+    // Operators only see their own devices — look up operators.id via profile_id
     if (isOperator && user?.id) {
-      query = query.eq('operator_id', user.id)
+      const { data: opRow } = await supabase
+        .from('operators').select('id').eq('profile_id', user.id).single()
+      if (opRow) query = query.eq('operator_id', opRow.id)
     }
 
     const { data } = await query
@@ -59,6 +61,16 @@ export default function DevicesPage() {
     }
     setPairingLoading(true)
     try {
+      // operators.id ≠ auth user.id — look it up first
+      const { data: opRow, error: opErr } = await supabase
+        .from('operators')
+        .select('id')
+        .eq('profile_id', user.id)
+        .single()
+      if (opErr || !opRow) {
+        toast('Could not find your operator account. Contact admin.', 'error'); return
+      }
+
       const jwt = session?.access_token
       const res = await fetch(`/api/devices/generate-pairing`, {
         method: 'POST',
@@ -66,7 +78,7 @@ export default function DevicesPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${jwt}`,
         },
-        body: JSON.stringify({ device_name: deviceName.trim(), operator_id: user.id }),
+        body: JSON.stringify({ device_name: deviceName.trim(), operator_id: opRow.id }),
       })
       const data = await res.json()
       if (!res.ok) { toast(data.error || 'Failed', 'error'); return }
