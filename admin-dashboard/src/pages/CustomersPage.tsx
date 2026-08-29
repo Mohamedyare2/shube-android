@@ -92,8 +92,15 @@ export default function CustomersPage() {
       setShowModal(false)
       load()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      toast(msg || 'Failed to save customer', 'error')
+      let msg = 'Failed to save customer'
+      if (err instanceof Error) {
+        msg = err.message
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        msg = String((err as { message: unknown }).message)
+      } else if (typeof err === 'string') {
+        msg = err
+      }
+      toast(msg, 'error')
     } finally {
       setSaving(false)
     }
