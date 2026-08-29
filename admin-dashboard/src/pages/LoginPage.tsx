@@ -8,10 +8,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPass, setShowPass] = useState(false)
 
-  if (session) {
-    return <Navigate to="/dashboard" replace />
-  }
+  if (session) return <Navigate to="/dashboard" replace />
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -24,53 +23,70 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-bg" />
-      <div className="login-card">
+      {/* Animated background blobs */}
+      <div className="login-blob login-blob-1" />
+      <div className="login-blob login-blob-2" />
+      <div className="login-blob login-blob-3" />
+
+      {/* Subtle grid overlay */}
+      <div className="login-grid" />
+
+      <div className="login-card-glass">
+        {/* Brand */}
         <div className="login-logo">
-          <div className="login-logo-icon">S</div>
+          <div className="login-logo-icon">
+            <span style={{ fontSize: '1.75rem' }}>📡</span>
+          </div>
           <div className="login-brand">SHUBE</div>
           <div className="login-tagline">Smart Bundle Distribution Platform</div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label" htmlFor="login-email">Email Address</label>
-            <input
-              id="login-email"
-              type="email"
-              className="form-input"
-              placeholder="Maxamed Sayid"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', pointerEvents: 'none' }}>✉️</span>
+              <input
+                id="login-email"
+                type="email"
+                className="form-input login-input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+                style={{ paddingLeft: '2.75rem' }}
+              />
+            </div>
           </div>
 
-          <div className="form-group">
+          <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label" htmlFor="login-password">Password</label>
-            <input
-              id="login-password"
-              type="password"
-              className="form-input"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', pointerEvents: 'none' }}>🔑</span>
+              <input
+                id="login-password"
+                type={showPass ? 'text' : 'password'}
+                className="form-input login-input"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                style={{ paddingLeft: '2.75rem', paddingRight: '3rem' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem', padding: '4px' }}
+              >
+                {showPass ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           {error && (
-            <div style={{
-              background: 'rgba(239,68,68,0.1)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              borderRadius: 'var(--radius-md)',
-              padding: 'var(--space-3) var(--space-4)',
-              color: 'hsl(0,84%,65%)',
-              fontSize: '0.875rem',
-              marginBottom: 'var(--space-4)',
-            }}>
+            <div className="login-error">
               ⚠️ {error}
             </div>
           )}
@@ -78,28 +94,19 @@ export default function LoginPage() {
           <button
             id="login-submit"
             type="submit"
-            className="btn btn-primary btn-lg"
+            className="login-btn-primary"
             disabled={loading}
-            style={{ width: '100%', justifyContent: 'center', marginTop: 'var(--space-2)' }}
           >
             {loading ? (
-              <><span className="spinner" style={{ width: 16, height: 16 }} /> Signing in...</>
+              <><span className="spinner" style={{ width: 18, height: 18, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} /> Signing in...</>
             ) : (
-              '🔐 Sign In'
+              <><span>🚀</span> Sign In to Dashboard</>
             )}
           </button>
         </form>
 
-        <div style={{
-          marginTop: 'var(--space-6)',
-          padding: 'var(--space-4)',
-          background: 'var(--bg-surface-2)',
-          borderRadius: 'var(--radius-md)',
-          fontSize: '0.75rem',
-          color: 'var(--text-muted)',
-          lineHeight: 1.6,
-        }}>
-          🔒 Authorized users only. All access is logged and monitored.
+        <div className="login-footer-note">
+          🔒 Authorized personnel only · All access is logged
         </div>
       </div>
     </div>

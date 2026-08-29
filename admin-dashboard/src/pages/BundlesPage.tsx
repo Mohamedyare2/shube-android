@@ -37,15 +37,15 @@ export default function BundlesPage() {
   function openEdit(b: BundleRule) {
     setEditing(b)
     setForm({
-      amount_sls:  String(b.amount_sls),
+      amount_sls: String(b.amount_sls),
       bundle_name: b.bundle_name,
       data_amount: String(b.data_amount),
-      data_unit:   b.data_unit,
+      data_unit: b.data_unit,
       ussd_option: b.ussd_option,
-      ussd_code:   b.ussd_code,
+      ussd_code: b.ussd_code,
       ussd_replies: b.ussd_replies || [],
-      active:      b.active,
-      sort_order:  String(b.sort_order),
+      active: b.active,
+      sort_order: String(b.sort_order),
     })
     setShowModal(true)
   }
@@ -60,15 +60,15 @@ export default function BundlesPage() {
     setSaving(true)
     try {
       const payload = {
-        amount_sls:  amt,
+        amount_sls: amt,
         bundle_name: form.bundle_name,
         data_amount: parseFloat(form.data_amount),
-        data_unit:   form.data_unit,
+        data_unit: form.data_unit,
         ussd_option: form.ussd_option,
-        ussd_code:   form.ussd_code,
+        ussd_code: form.ussd_code,
         ussd_replies: form.ussd_replies,
-        active:      form.active,
-        sort_order:  parseInt(form.sort_order) || 0,
+        active: form.active,
+        sort_order: parseInt(form.sort_order) || 0,
       }
       if (editing) {
         const { error } = await supabase.from('bundle_rules').update(payload).eq('id', editing.id)
@@ -160,15 +160,15 @@ export default function BundlesPage() {
                   <td className="table-mono" style={{ color: 'var(--brand-primary)' }}>{b.ussd_code}</td>
                   <td><span className={`badge ${profileStatusClass(b.active ? 'active' : 'disabled')}`}>{b.active ? 'ACTIVE' : 'DISABLED'}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(b.updated_at)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
-                        <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
-                          {b.active ? 'Disable' : 'Enable'}
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
-                      </div>
-                    </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
+                      <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
+                        {b.active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -223,21 +223,21 @@ export default function BundlesPage() {
               <div className="form-group" style={{ marginTop: 'var(--space-2)' }}>
                 <label className="form-label">Tallaabooyinka Xiga (Follow-up Replies)</label>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Halkan ku dar haddii xirmadani u baahan tahay in la sii doorto nambaro is xiga marka la garaaco koodhka kore (Tusaale: Reply 1, ka dib Reply 3, iwm).
+                  Halkan ku dar haddii xidhmada aad u baahan tahay in la sii doorto nambaro is xiga marka la garaaco koodhka kore (Tusaale: Reply 1, ka dib Reply 3, iwm).
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                   {form.ussd_replies.map((reply, idx) => (
                     <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <input 
-                        className="form-input" 
-                        value={reply} 
+                      <input
+                        className="form-input"
+                        value={reply}
                         onChange={e => {
                           const newReplies = [...form.ussd_replies]
                           newReplies[idx] = e.target.value
                           setForm(f => ({ ...f, ussd_replies: newReplies }))
                         }}
-                        placeholder={`Reply ${idx + 1} (Tusaale: 1)`} 
-                        style={{ fontFamily: 'monospace' }} 
+                        placeholder={`Reply ${idx + 1} (Tusaale: 1)`}
+                        style={{ fontFamily: 'monospace' }}
                       />
                       <button className="btn btn-secondary btn-icon" onClick={() => {
                         const newReplies = form.ussd_replies.filter((_, i) => i !== idx)
@@ -246,8 +246,8 @@ export default function BundlesPage() {
                     </div>
                   ))}
                 </div>
-                <button 
-                  className="btn btn-secondary btn-sm" 
+                <button
+                  className="btn btn-secondary btn-sm"
                   style={{ marginTop: 'var(--space-2)', alignSelf: 'flex-start' }}
                   onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, ''] }))}
                 >

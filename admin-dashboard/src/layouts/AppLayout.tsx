@@ -1,23 +1,31 @@
 import { useState, useEffect } from 'react'
-import { Outlet, Navigate } from 'react-router-dom'
+import { Outlet, Navigate, NavLink } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import Sidebar from '../components/Sidebar'
+
+const BOTTOM_NAV_ADMIN = [
+  { path: '/dashboard',    icon: '📊', label: 'Overview' },
+  { path: '/transactions', icon: '💳', label: 'Payments' },
+  { path: '/devices',      icon: '📱', label: 'Devices' },
+  { path: '/bundles',      icon: '📦', label: 'Bundles' },
+  { path: '/operators',    icon: '👤', label: 'Operators' },
+]
+
+const BOTTOM_NAV_OPERATOR = [
+  { path: '/dashboard',    icon: '📊', label: 'Overview' },
+  { path: '/transactions', icon: '💳', label: 'Payments' },
+  { path: '/devices',      icon: '📱', label: 'Devices' },
+  { path: '/bundles',      icon: '📦', label: 'Bundles' },
+  { path: '/ussd-config',  icon: '⚙️', label: 'USSD' },
+]
 
 export default function AppLayout() {
   const { session, loading, isAdmin, isOperator, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // Close sidebar on route change (when a nav item is tapped)
-  useEffect(() => {
-    setSidebarOpen(false)
-  }, [])
-
-  // Close sidebar when screen grows beyond mobile
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)')
-    const handler = (e: MediaQueryListEvent) => {
-      if (e.matches) setSidebarOpen(false)
-    }
+    const handler = (e: MediaQueryListEvent) => { if (e.matches) setSidebarOpen(false) }
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
@@ -44,6 +52,8 @@ export default function AppLayout() {
       </div>
     </div>
   )
+
+  const bottomNavItems = isAdmin ? BOTTOM_NAV_ADMIN : BOTTOM_NAV_OPERATOR
 
   return (
     <div className="app-layout">
@@ -82,6 +92,20 @@ export default function AppLayout() {
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* ── Bottom Navigation Bar (Mobile only) ─────────────── */}
+      <nav className="bottom-nav" aria-label="Bottom navigation">
+        {bottomNavItems.map(item => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={({ isActive }) => `bottom-nav-item${isActive ? ' active' : ''}`}
+          >
+            <span className="bottom-nav-icon">{item.icon}</span>
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }
