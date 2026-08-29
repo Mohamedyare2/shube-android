@@ -168,6 +168,38 @@ app.post("/api/operators/reset-password", async (req, res) => {
   }
 });
 
+// ── Delete Operator ───────────────────────────────────────────────────────────
+app.delete("/api/operators/:profile_id", async (req, res) => {
+  if (!callerJwt(req)) return res.status(401).json({ error: "Unauthorized — missing bearer token" });
+
+  const { profile_id } = req.params;
+  const { actor_id, username } = req.body || {};
+
+  try {
+    // Delete from auth.users (cascades to profiles and operators tables)
+    const delResp = await sbFetch(`${SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {
+      method: "DELETE",
+    });
+    
+    // Auth admin API returns 200 with empty JSON or user obj. If not ok, it's an error.
+    if (!delResp.ok) {
+      const delData = await delResp.json().catch(() => ({}));
+      return res.status(delResp.status).json({ error: delData.message || delData.msg || "Failed to delete user" });
+    }
+
+    // Audit log
+    await sbFetch(`${SUPABASE_URL}/rest/v1/audit_logs`, {
+      method: "POST",
+      body: JSON.stringify({ actor_id, actor_role: "admin", action: "operator_deleted", resource_type: "operator", resource_id: profile_id, description: `Deleted operator ${username || profile_id}` }),
+    }).catch(() => {});
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[delete-operator]", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
 // ── Devices (Worker App API) ──────────────────────────────────────────────────
 
 // 1. Generate/Get Pairing Code (For Operator Dashboard)

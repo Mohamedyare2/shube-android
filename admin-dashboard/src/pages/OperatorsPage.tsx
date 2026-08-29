@@ -195,6 +195,40 @@ export default function OperatorsPage() {
     }
   }
 
+  async function handleDeleteOperator(op: OperatorWithProfile) {
+    if (!window.confirm(`Are you sure you want to PERMANENTLY delete operator ${op.username}?\nThis will delete their login account and all associated operator settings.\nTransactions and audit logs will remain but their reference to this operator may be lost.`)) {
+      return
+    }
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const res = await fetch(`${ADMIN_API_URL}/api/operators/${op.profile_id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          actor_id: user?.id,
+          username: op.username
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Failed to delete operator')
+      }
+
+      toast('Operator deleted successfully', 'success')
+      load()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast(msg || 'Failed to delete operator', 'error')
+    }
+  }
+
   const filtered = operators.filter(op =>
     !search ||
     op.username.toLowerCase().includes(search.toLowerCase()) ||
@@ -259,6 +293,7 @@ export default function OperatorsPage() {
                       <button className={`btn btn-sm ${op.profile?.status === 'active' ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleStatus(op)}>
                         {op.profile?.status === 'active' ? 'Disable' : 'Enable'}
                       </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleDeleteOperator(op)}>Delete</button>
                     </div>
                   </td>
                 </tr>
