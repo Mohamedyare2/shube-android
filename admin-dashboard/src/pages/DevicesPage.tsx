@@ -23,7 +23,7 @@ export default function DevicesPage() {
     setLoading(true)
     let query = supabase
       .from('devices')
-      .select(`*, operator:operators(username, profile:profiles(full_name))`)
+      .select(`*, operator:operators(username, profile:profiles!profile_id(full_name))`)
       .order('last_seen', { ascending: false, nullsFirst: false })
 
     // Operators only see their own devices
