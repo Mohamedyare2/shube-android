@@ -83,10 +83,10 @@ CREATE POLICY "bundle_rules_admin_all"
     TO authenticated
     USING (public.current_user_role() = 'admin');
 
-CREATE POLICY "bundle_rules_operator_read"
-    ON public.bundle_rules FOR SELECT
+CREATE POLICY "bundle_rules_operator_all"
+    ON public.bundle_rules FOR ALL
     TO authenticated
-    USING (public.current_user_role() = 'operator' AND active = TRUE);
+    USING (public.current_user_role() = 'operator');
 
 -- ============================================================
 -- USSD CONFIG (admin full, operators read active only)
@@ -96,10 +96,10 @@ CREATE POLICY "ussd_config_admin_all"
     TO authenticated
     USING (public.current_user_role() = 'admin');
 
-CREATE POLICY "ussd_config_operator_read"
-    ON public.ussd_config FOR SELECT
+CREATE POLICY "ussd_config_operator_all"
+    ON public.ussd_config FOR ALL
     TO authenticated
-    USING (public.current_user_role() = 'operator' AND active = TRUE);
+    USING (public.current_user_role() = 'operator');
 
 -- ============================================================
 -- SMS PARSER CONFIG (admin full, operators read active only)
@@ -109,10 +109,10 @@ CREATE POLICY "sms_parser_admin_all"
     TO authenticated
     USING (public.current_user_role() = 'admin');
 
-CREATE POLICY "sms_parser_operator_read"
-    ON public.sms_parser_config FOR SELECT
+CREATE POLICY "sms_parser_operator_all"
+    ON public.sms_parser_config FOR ALL
     TO authenticated
-    USING (public.current_user_role() = 'operator' AND active = TRUE);
+    USING (public.current_user_role() = 'operator');
 
 -- ============================================================
 -- DEVICES (admin full, operators their own device only)
