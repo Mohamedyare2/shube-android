@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { UssdConfig } from '../types/database'
+import type { UssdConfig, UssdStep } from '../types/database'
 import { formatDate, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
-import { useAuth } from '../contexts/AuthContext'
 
 export default function UssdConfigPage() {
   const { toast } = useToast()
-  const { isAdmin } = useAuth()
   const [configs, setConfigs] = useState<UssdConfig[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -19,7 +17,7 @@ export default function UssdConfigPage() {
   const [form, setForm] = useState({
     name: '',
     description: '',
-    stepsStr: '[]',
+    steps: [] as UssdStep[],
     active: true
   })
 
@@ -37,7 +35,9 @@ export default function UssdConfigPage() {
     setForm({
       name: '',
       description: '',
-      stepsStr: '[\n  {\n    "step": 1,\n    "type": "DIAL",\n    "description": "Initial dial",\n    "ussd_code_template": "*106#",\n    "timeout_ms": 10000\n  }\n]',
+      steps: [
+        { step: 1, type: 'DIAL', description: 'Garaac Koodhka (Dial)', ussd_code_template: '*106#', timeout_ms: 10000 }
+      ] as UssdStep[],
       active: true
     })
     setShowModal(true)
@@ -48,24 +48,47 @@ export default function UssdConfigPage() {
     setForm({
       name: c.name,
       description: c.description || '',
-      stepsStr: JSON.stringify(c.steps, null, 2),
+      steps: Array.isArray(c.steps) ? (c.steps as unknown as UssdStep[]) : [],
       active: c.active
     })
     setShowModal(true)
   }
 
+  function addStep(type: UssdStep['type']) {
+    const descMap: Record<string, string> = {
+      'DIAL': 'Garaac Koodhka (Dial)',
+      'SEND_REPLY': 'Sii Dooro (Reply)',
+      'ENTER_NUMBER': 'Geli Nambarka Somtel',
+      'ENTER_PIN': 'Geli PIN-ka',
+      'READ_RESPONSE': 'Akhri Natiijada'
+    }
+    const newStep: UssdStep = {
+      step: form.steps.length + 1,
+      type,
+      description: descMap[type] || '',
+      timeout_ms: 10000,
+    }
+    setForm(f => ({ ...f, steps: [...f.steps, newStep] }))
+  }
+
+  function updateStep(index: number, key: keyof UssdStep, value: any) {
+    const newSteps = [...form.steps]
+    newSteps[index] = { ...newSteps[index], [key]: value } as UssdStep
+    setForm(f => ({ ...f, steps: newSteps }))
+  }
+
+  function removeStep(index: number) {
+    const newSteps = form.steps.filter((_, i) => i !== index).map((s, i) => ({ ...s, step: i + 1 }))
+    setForm(f => ({ ...f, steps: newSteps }))
+  }
+
   async function handleSave() {
     if (!form.name) {
-      toast('Name is required', 'error')
+      toast('Fadlan geli magaca (Name is required)', 'error')
       return
     }
-    
-    let parsedSteps = []
-    try {
-      parsedSteps = JSON.parse(form.stepsStr)
-      if (!Array.isArray(parsedSteps)) throw new Error('Steps must be a JSON array')
-    } catch (e: any) {
-      toast('Invalid JSON in steps: ' + e.message, 'error')
+    if (form.steps.length === 0) {
+      toast('Ugu yaraan hal tallaabo (step) waa inuu ku jiraa', 'error')
       return
     }
 
@@ -74,24 +97,24 @@ export default function UssdConfigPage() {
       const payload = {
         name: form.name,
         description: form.description,
-        steps: parsedSteps,
+        steps: form.steps as unknown as any[],
         active: form.active
       }
 
       if (editing) {
         const { error } = await supabase.from('ussd_config').update(payload).eq('id', editing.id)
         if (error) throw error
-        toast('USSD Configuration updated', 'success')
+        toast('Waa la cusboonaysiiyay (Updated)', 'success')
       } else {
         const { error } = await supabase.from('ussd_config').insert(payload)
         if (error) throw error
-        toast('USSD Configuration added', 'success')
+        toast('Waa la keydiyay (Saved)', 'success')
       }
       
       setShowModal(false)
       load()
     } catch (err: any) {
-      toast(err.message || 'Failed to save configuration', 'error')
+      toast(err.message || 'Cillad ayaa dhacday', 'error')
     } finally {
       setSaving(false)
     }
@@ -100,14 +123,14 @@ export default function UssdConfigPage() {
   async function handleDelete(c: UssdConfig) {
     const { error } = await supabase.from('ussd_config').delete().eq('id', c.id)
     if (error) { toast(error.message, 'error'); return }
-    toast('Configuration deleted', 'success')
+    toast('Waa la tirtiray (Deleted)', 'success')
     setDeleteConfirm(null)
     load()
   }
 
   async function toggleActive(c: UssdConfig) {
     await supabase.from('ussd_config').update({ active: !c.active }).eq('id', c.id)
-    toast(`Configuration ${c.active ? 'disabled' : 'enabled'}`, 'success')
+    toast(`Waa la ${c.active ? 'xidhay' : 'furay'}`, 'success')
     load()
   }
 
@@ -115,10 +138,10 @@ export default function UssdConfigPage() {
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">USSD Configuration</h1>
-          <p className="page-subtitle">Manage Android automated USSD step workflows</p>
+          <h1 className="page-title">Habaynta USSD (USSD Flow Config)</h1>
+          <p className="page-subtitle">Halkan ka samee talaabooyinka la raacayo (Steps) marka xirmo la shubayo</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add Config</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ Ku dar Flow Cusub</button>
       </div>
 
       <div className="card">
@@ -126,12 +149,12 @@ export default function UssdConfigPage() {
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Description</th>
-                <th>Steps</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th>Actions</th>
+                <th>Magaca (Name)</th>
+                <th>Faahfaahin (Description)</th>
+                <th>Tallaabooyinka (Steps)</th>
+                <th>Xaaladda (Status)</th>
+                <th>Xilligii Udanbeeyay (Updated)</th>
+                <th>Tallaabooyin (Actions)</th>
               </tr>
             </thead>
             <tbody>
@@ -148,8 +171,8 @@ export default function UssdConfigPage() {
                   <td colSpan={6}>
                     <div className="empty-state">
                       <div className="empty-icon">⚙️</div>
-                      <div className="empty-title">No USSD Configurations</div>
-                      <div className="empty-desc">Create your first USSD workflow.</div>
+                      <div className="empty-title">Majiro USSD Flow</div>
+                      <div className="empty-desc">Samee qaabka USSD-ga loo garaacayo.</div>
                     </div>
                   </td>
                 </tr>
@@ -164,17 +187,17 @@ export default function UssdConfigPage() {
                   </td>
                   <td>
                     <span className={`badge ${profileStatusClass(c.active ? 'active' : 'disabled')}`}>
-                      {c.active ? 'ACTIVE' : 'DISABLED'}
+                      {c.active ? 'Furan (ACTIVE)' : 'Xidhan (DISABLED)'}
                     </span>
                   </td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(c.updated_at)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Beddel (Edit)</button>
                       <button className={`btn btn-sm ${c.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(c)}>
-                        {c.active ? 'Disable' : 'Enable'}
+                        {c.active ? 'Xidh (Disable)' : 'Fur (Enable)'}
                       </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Delete</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Tirtir</button>
                     </div>
                   </td>
                 </tr>
@@ -186,64 +209,97 @@ export default function UssdConfigPage() {
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 640 }}>
             <div className="modal-header">
-              <div className="modal-title">{editing ? 'Edit USSD Configuration' : 'Add USSD Configuration'}</div>
+              <div className="modal-title">{editing ? 'Beddel USSD Flow' : 'Ku Dar USSD Flow Cusub'}</div>
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowModal(false)}>✕</button>
             </div>
-            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', maxHeight: '70vh', overflowY: 'auto' }}>
               
               <div className="form-group">
-                <label className="form-label">Name *</label>
+                <label className="form-label">Magaca Flow-ga (Name) *</label>
                 <input 
                   className="form-input" 
                   value={form.name} 
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))} 
-                  placeholder="e.g. Somtel Bundle Purchase" 
+                  placeholder="Tusaale: Xirmada $0.5 Flow" 
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Description</label>
+                <label className="form-label">Faahfaahin (Description)</label>
                 <input 
                   className="form-input" 
                   value={form.description} 
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))} 
-                  placeholder="Describe this workflow..." 
+                  placeholder="Maxaa flow-gan loogu talo galay..." 
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Workflow Steps (JSON Array) *</label>
-                <div style={{ background: 'var(--bg-surface-2)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-2)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  💡 <strong>Available Variables:</strong> <code>{'{somtel_number}'}</code> (Customer Somtel #), <code>{'{pin}'}</code> (Wallet PIN), <code>{'{bundle_option}'}</code> (Option code).
-                  <br />
-                  💡 <strong>Step Types:</strong> <code>DIAL</code> (Dial USSD), <code>SEND_REPLY</code> (Enter 1, 2, etc.), <code>ENTER_NUMBER</code> (Enter Somtel #), <code>ENTER_PIN</code> (Enter PIN), <code>READ_RESPONSE</code>.
+              <div>
+                <label className="form-label" style={{ marginBottom: 'var(--space-2)' }}>Tallaabooyinka Loo Raacayo (Steps) *</label>
+                <div style={{ background: 'var(--bg-surface-2)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-3)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  💡 <strong>Kuwaan waxaad ku qori kartaa meel kasta:</strong> <br/>
+                  <code>{'{somtel_number}'}</code> = Nambarka macmiilka uu leeyahay<br/>
+                  <code>{'{bundle_option}'}</code> = Nambarka la sii dooranayo ee xirmada<br/>
+                  <code>{'{pin}'}</code> = PIN-ka taleefanka ee sirta ah
                 </div>
-                <textarea
-                  className="form-input"
-                  style={{ fontFamily: 'monospace', minHeight: 250, resize: 'vertical', fontSize: '0.85rem' }}
-                  value={form.stepsStr}
-                  onChange={e => setForm(f => ({ ...f, stepsStr: e.target.value }))}
-                />
-                <span className="form-hint">Must be a valid JSON array of UssdStep objects.</span>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  {form.steps.map((step, idx) => (
+                    <div key={idx} style={{ padding: 'var(--space-3)', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', position: 'relative' }}>
+                      <button className="btn btn-ghost btn-sm btn-icon" style={{ position: 'absolute', top: 4, right: 4 }} onClick={() => removeStep(idx)}>✕</button>
+                      <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--brand-primary)', marginBottom: 'var(--space-2)' }}>Tallaabada {idx + 1}: {
+                        step.type === 'DIAL' ? 'Garaac Koodhka' :
+                        step.type === 'SEND_REPLY' ? 'Sii Dooro (Reply)' :
+                        step.type === 'ENTER_NUMBER' ? 'Geli Nambarka Somtel' :
+                        step.type === 'ENTER_PIN' ? 'Geli PIN-ka' : 'Akhri Natiijada'
+                      }</div>
+                      
+                      {step.type === 'DIAL' && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Maxaa la garaacayaa? (USSD Code)</label>
+                          <input className="form-input" value={step.ussd_code_template || ''} onChange={e => updateStep(idx, 'ussd_code_template', e.target.value)} placeholder="Tusaale: *137*{somtel_number}*50*{pin}#" style={{ fontFamily: 'monospace' }} />
+                        </div>
+                      )}
+                      
+                      {step.type === 'SEND_REPLY' && (
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontSize: '0.75rem' }}>Maxaa la sii dooranayaa? (Reply)</label>
+                          <input className="form-input" value={step.value || ''} onChange={e => updateStep(idx, 'value', e.target.value)} placeholder="Tusaale: 1 ama {bundle_option}" style={{ fontFamily: 'monospace' }} />
+                        </div>
+                      )}
+                      
+                      {(step.type === 'ENTER_NUMBER' || step.type === 'ENTER_PIN') && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>System-ka ayaa si toos ah u gelin doona {step.type === 'ENTER_PIN' ? 'PIN-ka qarsoon' : 'Nambarka Somtel ee Macmiilka'}.</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => addStep('DIAL')}>+ Garaac Koodhka</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => addStep('SEND_REPLY')}>+ Sii Dooro (Reply)</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => addStep('ENTER_NUMBER')}>+ Geli Somtel Num</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => addStep('ENTER_PIN')}>+ Geli PIN-ka</button>
+                </div>
               </div>
 
-              <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <label className="form-label" style={{ marginBottom: 0 }}>Active</label>
+              <div className="form-group" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 'var(--space-2)' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Xaaladda (Active)</label>
                 <label className="toggle-wrapper">
                   <div className={`toggle-track${form.active ? ' on' : ''}`} onClick={() => setForm(f => ({ ...f, active: !f.active }))}>
                     <div className="toggle-thumb" />
                   </div>
-                  <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{form.active ? 'Active' : 'Disabled'}</span>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{form.active ? 'Wuu Furan Yahay' : 'Wuu Xidhan Yahay'}</span>
                 </label>
               </div>
 
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
+              <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Jooji (Cancel)</button>
               <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-                {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Config'}
+                {saving ? 'Waa la keydinayaa...' : editing ? 'Keydi Isbeddelka' : 'Keydi Flow-ga Cusub'}
               </button>
             </div>
           </div>
@@ -254,17 +310,17 @@ export default function UssdConfigPage() {
         <div className="modal-backdrop" onClick={() => setDeleteConfirm(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
-              <div className="modal-title">Delete Configuration</div>
+              <div className="modal-title">Tirtir (Delete)</div>
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setDeleteConfirm(null)}>✕</button>
             </div>
             <div className="modal-body">
               <p style={{ color: 'var(--text-secondary)' }}>
-                Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{deleteConfirm.name}</strong>?
+                Ma hubtaa inaad tirtirto flow-gan <strong style={{ color: 'var(--text-primary)' }}>{deleteConfirm.name}</strong>?
               </p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>Delete Config</button>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Jooji (Cancel)</button>
+              <button className="btn btn-danger" onClick={() => handleDelete(deleteConfirm)}>Haa, Tirtir</button>
             </div>
           </div>
         </div>
