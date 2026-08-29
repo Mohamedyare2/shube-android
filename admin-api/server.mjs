@@ -260,17 +260,17 @@ app.post("/api/devices/pair", async (req, res) => {
 
 // 3. Heartbeat (Called by Android App)
 app.post("/api/devices/heartbeat", async (req, res) => {
-  const { device_id, battery_level, network_type } = req.body || {};
+  const { device_id, battery_level, is_charging, network_type } = req.body || {};
   if (!device_id) return res.status(400).json({ error: "device_id required" });
 
   try {
     await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}`, {
       method: "PATCH",
       body: JSON.stringify({
-        battery_level: battery_level || 0,
-        network_type: network_type || 'UNKNOWN',
-        is_online: true,
-        last_ping_at: new Date().toISOString(),
+        battery_level: battery_level || null,
+        is_charging: is_charging || false,
+        status: 'online', // Keep this, as network_type isn't in DB
+        last_seen: new Date().toISOString(),
       }),
     });
     return res.json({ success: true });

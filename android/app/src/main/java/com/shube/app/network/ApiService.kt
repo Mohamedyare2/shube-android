@@ -93,11 +93,13 @@ class ApiService(private val context: Context) {
                 conn.readTimeout = 8_000
 
                 val battery = getBatteryLevel()
+                val isCharging = getIsCharging()
                 val network = getNetworkType()
 
                 val body = JSONObject()
                     .put("device_id", deviceId)
                     .put("battery_level", battery)
+                    .put("is_charging", isCharging)
                     .put("network_type", network)
                     .toString()
 
@@ -106,7 +108,7 @@ class ApiService(private val context: Context) {
                 val code = conn.responseCode
                 conn.disconnect()
 
-                Log.d("ApiService", "heartbeat $code — battery=$battery network=$network")
+                Log.d("ApiService", "heartbeat $code — battery=$battery% charging=$isCharging network=$network")
                 HeartbeatResult(success = code in 200..299)
             } catch (e: Exception) {
                 Log.w("ApiService", "heartbeat error: ${e.message}")
@@ -117,6 +119,11 @@ class ApiService(private val context: Context) {
     private fun getBatteryLevel(): Int {
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
+
+    private fun getIsCharging(): Boolean {
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        return bm.isCharging
     }
 
     private fun getNetworkType(): String {

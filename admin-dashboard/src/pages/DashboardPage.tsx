@@ -313,8 +313,22 @@ export default function DashboardPage() {
                 }}>
                   <div style={{ fontSize: '1.5rem' }}>📱</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.875rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       {dev.device_name}
+                      {dev.battery_level != null && (
+                        <span style={{ 
+                          fontSize: '0.7rem', 
+                          color: dev.battery_level > 20 ? 'var(--status-success)' : 'var(--status-failed)',
+                          background: 'var(--bg-surface-3)',
+                          padding: '1px 6px',
+                          borderRadius: '12px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}>
+                          {dev.is_charging ? '⚡' : '🔋'} {dev.battery_level}%
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
                       {(dev.operator as { username?: string })?.username ?? '—'} · {timeAgo(dev.last_seen)}
