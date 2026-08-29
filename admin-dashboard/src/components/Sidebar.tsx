@@ -10,11 +10,11 @@ interface NavItem {
   badge?: number
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { section: 'Overview',     path: '/dashboard',    icon: '📊', label: 'Dashboard' },
-  { path: '/transactions',   icon: '💳', label: 'Transactions' },
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { section: 'Overview',     path: '/dashboard',    icon: '📊', label: 'Global Dashboard' },
+  { path: '/transactions',   icon: '💳', label: 'All Transactions' },
   { section: 'Management',   path: '/operators',    icon: '👤', label: 'Operators' },
-  { path: '/devices',        icon: '📱', label: 'Devices' },
+  { path: '/devices',        icon: '📱', label: 'All Devices' },
   { path: '/customers',      icon: '👥', label: 'Customers' },
   { path: '/bundles',        icon: '📦', label: 'Bundle Rules' },
   { section: 'Configuration',path: '/ussd-config',  icon: '⚙️', label: 'USSD Config' },
@@ -24,8 +24,14 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/settings',       icon: '🔧', label: 'Settings' },
 ]
 
+const OPERATOR_NAV_ITEMS: NavItem[] = [
+  { section: 'My Business',  path: '/dashboard',    icon: '📊', label: 'Dashboard' },
+  { path: '/transactions',   icon: '💳', label: 'My Transactions' },
+  { path: '/devices',        icon: '📱', label: 'My Devices' },
+]
+
 export default function Sidebar() {
-  const { profile, signOut } = useAuth()
+  const { profile, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
 
   async function handleSignOut() {
@@ -38,7 +44,10 @@ export default function Sidebar() {
     .map(n => n[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() ?? 'AD'
+    .toUpperCase() ?? (isAdmin ? 'AD' : 'OP')
+
+  const navItems = isAdmin ? ADMIN_NAV_ITEMS : OPERATOR_NAV_ITEMS
+  const roleLabel = isAdmin ? 'Admin' : 'Operator'
 
   return (
     <aside className="sidebar">
@@ -46,12 +55,12 @@ export default function Sidebar() {
         <div className="sidebar-logo-icon">S</div>
         <div>
           <div className="sidebar-logo-text">SHUBE</div>
-          <div className="sidebar-logo-sub">Admin Dashboard</div>
+          <div className="sidebar-logo-sub">{isAdmin ? 'Admin Portal' : 'Operator Portal'}</div>
         </div>
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map((item, idx) => (
+        {navItems.map((item, idx) => (
           <React.Fragment key={idx}>
             {item.section && <div className="nav-section-label">{item.section}</div>}
             <NavLink
@@ -70,8 +79,8 @@ export default function Sidebar() {
         <div className="sidebar-user" onClick={handleSignOut} title="Click to sign out">
           <div className="user-avatar">{initials}</div>
           <div className="user-info">
-            <div className="user-name">{profile?.full_name ?? 'Admin'}</div>
-            <div className="user-role">Admin · Sign Out</div>
+            <div className="user-name">{profile?.full_name ?? roleLabel}</div>
+            <div className="user-role">{roleLabel} · Sign Out</div>
           </div>
           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>↪</span>
         </div>

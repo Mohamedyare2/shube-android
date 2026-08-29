@@ -90,7 +90,7 @@ class GatewayForegroundService : Service() {
     
     private fun createNotification(title: String, text: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            // .setSmallIcon(R.drawable.ic_notification) // Requires an actual drawable
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_LOW)

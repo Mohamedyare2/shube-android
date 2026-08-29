@@ -5,6 +5,9 @@ import { formatDate, formatDateTime, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
+// Flask admin API — handles privileged Supabase Auth operations
+const ADMIN_API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5050'
+
 interface OperatorWithProfile extends Operator {
   profile: Profile
   device_count?: number
@@ -30,13 +33,19 @@ export default function OperatorsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('operators')
       .select(`*, profile:profiles(*)`)
       .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('Supabase fetch error:', error)
+      toast(error.message, 'error')
+    }
+    
     if (data) setOperators(data as OperatorWithProfile[])
     setLoading(false)
-  }, [])
+  }, [toast])
 
   useEffect(() => { load() }, [load])
 
@@ -88,41 +97,37 @@ export default function OperatorsPage() {
         })
         toast('Operator updated', 'success')
       } else {
-        // Create new user via Supabase Auth (admin creates user)
+        // Create new user via Flask admin API (requires service_role key)
         if (!form.email || !form.password) {
           toast('Email and password required for new operator', 'error'); setSaving(false); return
         }
-        // Create auth user
-        const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
-          email: form.email,
-          password: form.password,
-          user_metadata: { role: 'operator', full_name: form.full_name },
-          email_confirm: true,
-        })
-        if (authErr) throw authErr
 
-        // Update profile (should be auto-created by trigger)
-        await supabase.from('profiles').update({
-          role: 'operator',
-          full_name: form.full_name,
-          phone_number: form.phone_number || null,
-          force_password_change: true,
-        }).eq('id', authData.user.id)
+        // Get current session JWT to authenticate with Flask API
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('Not authenticated')
 
-        // Create operator record
-        const { error: opErr } = await supabase.from('operators').insert({
-          profile_id: authData.user.id,
-          username: form.username,
-          notes: form.notes || null,
-          created_by: user?.id,
+        const res = await fetch(`${ADMIN_API_URL}/api/operators`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            email:        form.email,
+            password:     form.password,
+            full_name:    form.full_name,
+            username:     form.username,
+            phone_number: form.phone_number || null,
+            notes:        form.notes || null,
+            actor_id:     user?.id,
+          }),
         })
-        if (opErr) throw opErr
 
-        await supabase.from('audit_logs').insert({
-          actor_id: user?.id, actor_role: 'admin', action: 'operator_created',
-          resource_type: 'operator', resource_id: authData.user.id,
-          description: `Created operator ${form.username}`,
-        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.statusText }))
+          throw new Error(err.error || 'Failed to create operator')
+        }
+
         toast('Operator created successfully', 'success')
       }
       setShowModal(false)
@@ -155,16 +160,30 @@ export default function OperatorsPage() {
     }
     setSaving(true)
     try {
-      const { error } = await supabase.auth.admin.updateUserById(showResetModal.profile_id, {
-        password: newPassword,
+      // Reset password via Flask admin API (requires service_role key)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not authenticated')
+
+      const res = await fetch(`${ADMIN_API_URL}/api/operators/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          profile_id:  showResetModal.profile_id,
+          password:    newPassword,
+          username:    showResetModal.username,
+          operator_id: showResetModal.id,
+          actor_id:    user?.id,
+        }),
       })
-      if (error) throw error
-      await supabase.from('profiles').update({ force_password_change: true }).eq('id', showResetModal.profile_id)
-      await supabase.from('audit_logs').insert({
-        actor_id: user?.id, actor_role: 'admin', action: 'operator_password_reset',
-        resource_type: 'operator', resource_id: showResetModal.id,
-        description: `Password reset for ${showResetModal.username}`,
-      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || 'Failed to reset password')
+      }
+
       toast('Password reset successfully', 'success')
       setShowResetModal(null)
       setNewPassword('')

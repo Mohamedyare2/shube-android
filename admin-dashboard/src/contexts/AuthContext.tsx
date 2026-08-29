@@ -11,6 +11,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   isAdmin: boolean
+  isOperator: boolean
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType)
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session, user, profile, loading,
       signIn, signOut,
       isAdmin: profile?.role === 'admin' || user?.app_metadata?.role === 'admin',
+      isOperator: profile?.role === 'operator' || user?.app_metadata?.role === 'operator',
     }}>
       {children}
     </AuthContext.Provider>

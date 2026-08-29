@@ -3,17 +3,21 @@ import { supabase } from '../lib/supabase'
 import type { Transaction, Device, DashboardStats } from '../types/database'
 import { formatSLS, formatNumber, formatTime, txStatusClass, txStatusLabel, deviceStatusClass, timeAgo } from '../lib/utils'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { useAuth } from '../contexts/AuthContext'
+import OperatorDashboardPage from './OperatorDashboardPage'
 
 const STAT_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#8b5cf6']
 
 export default function DashboardPage() {
+  const { isOperator } = useAuth()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [chartData, setChartData] = useState<{ name: string; success: number; failed: number; total: number }[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!isOperator) // Don't block loading if operator
 
   const loadData = useCallback(async () => {
+    if (isOperator) return; // Skip loading admin data for operators
     // Dashboard stats
     const { data: statsData } = await supabase.rpc('get_dashboard_stats')
     if (statsData) setStats(statsData as unknown as DashboardStats)
@@ -76,6 +80,10 @@ export default function DashboardPage() {
 
     return () => { supabase.removeChannel(txChannel) }
   }, [loadData])
+
+  if (isOperator) {
+    return <OperatorDashboardPage />
+  }
 
   if (loading) {
     return (

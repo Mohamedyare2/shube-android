@@ -69,7 +69,10 @@ class UssdStateMachine(private val context: Context) {
                         val template = step.ussdCodeTemplate 
                             ?: return UssdResult.FAILED.also { Log.e("UssdStateMachine", "DIAL step missing template") }
                         
-                        val codeToDial = template.replace("{bundle_option}", bundleOption)
+                        val codeToDial = template
+                            .replace("{bundle_option}", bundleOption)
+                            .replace("{somtel_number}", somtelNumber)
+                            
                         Log.d("UssdStateMachine", "Dialing: $codeToDial")
                         
                         val success = dialUssd(codeToDial)

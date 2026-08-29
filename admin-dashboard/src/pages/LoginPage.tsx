@@ -29,17 +29,17 @@ export default function LoginPage() {
         <div className="login-logo">
           <div className="login-logo-icon">S</div>
           <div className="login-brand">SHUBE</div>
-          <div className="login-tagline">Telesom → Somtel Auto-Recharge System</div>
+          <div className="login-tagline">Smart Bundle Distribution Platform</div>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label" htmlFor="login-email">Admin Email</label>
+            <label className="form-label" htmlFor="login-email">Email Address</label>
             <input
               id="login-email"
               type="email"
               className="form-input"
-              placeholder="admin@shube.so"
+              placeholder="your@email.com"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
@@ -85,7 +85,7 @@ export default function LoginPage() {
             {loading ? (
               <><span className="spinner" style={{ width: 16, height: 16 }} /> Signing in...</>
             ) : (
-              '🔐 Sign In to Dashboard'
+              '🔐 Sign In'
             )}
           </button>
         </form>
@@ -99,7 +99,7 @@ export default function LoginPage() {
           color: 'var(--text-muted)',
           lineHeight: 1.6,
         }}>
-          🔒 Authorized administrators only. All access is logged.
+          🔒 Authorized users only. All access is logged and monitored.
         </div>
       </div>
     </div>

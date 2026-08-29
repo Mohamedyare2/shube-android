@@ -14,3 +14,9 @@ admin-dashboard/dist/
 .env.local
 *.keystore
 *.jks
+
+# Flask admin API
+admin-api/.env
+admin-api/venv/
+admin-api/__pycache__/
+admin-api/*.pyc

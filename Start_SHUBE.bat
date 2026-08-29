@@ -13,17 +13,22 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo Tagida galka barnaamijka...
+echo.
+echo [1/3] Kicinta Flask Admin API (port 5050)...
+start "SHUBE Admin API" cmd /k "cd /d %~dp0admin-api && start.bat"
+
+echo.
+echo [2/3] Tagida galka barnaamijka...
 cd /d "%~dp0admin-dashboard"
 
 echo.
-echo [1/2] Ku-rakibida xirmooyinka (Dependencies)... Tani way yara qaadanaysaa markii ugu horraysa...
+echo [3/3] Ku-rakibida xirmooyinka (Dependencies)... Tani way yara qaadanaysaa markii ugu horraysa...
 call npm install
 
 echo.
-echo [2/2] Kicinta Dashboard-ka...
+echo Kicinta Dashboard-ka...
 echo.
-echo Fadlan ha xirin daaqadan madow (CMD)!
+echo Fadlan ha xirin daaqadahan madow (CMD)!
 echo Browser-kaaga ayaa hadda toos u furmaya...
 
 start http://localhost:5173

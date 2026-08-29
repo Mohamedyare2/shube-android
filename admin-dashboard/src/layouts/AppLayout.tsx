@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import Sidebar from '../components/Sidebar'
 
 export default function AppLayout() {
-  const { session, loading, isAdmin, signOut } = useAuth()
+  const { session, loading, isAdmin, isOperator, signOut } = useAuth()
 
   if (loading) {
     return (
@@ -17,12 +17,12 @@ export default function AppLayout() {
   }
 
   if (!session) return <Navigate to="/login" replace />
-  if (!isAdmin) return (
+  if (!isAdmin && !isOperator) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-page)' }}>
       <div style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
         <div style={{ fontSize: '3rem', marginBottom: 'var(--space-4)' }}>🔒</div>
         <h1 style={{ color: 'var(--text-primary)', marginBottom: 'var(--space-2)' }}>Access Denied</h1>
-        <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-6)' }}>This dashboard is for administrators only.</p>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-6)' }}>This dashboard is for authorized users only.</p>
         <button 
           onClick={async () => {
             await signOut()
