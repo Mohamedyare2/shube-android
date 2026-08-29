@@ -16,7 +16,7 @@ export default function BundlesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<BundleRule | null>(null)
   const [form, setForm] = useState({
     amount_sls: '', bundle_name: '', data_amount: '', data_unit: 'GB' as 'GB' | 'MB',
-    ussd_option: '', ussd_code: '', active: true, sort_order: '0',
+    ussd_option: '', ussd_code: '', ussd_replies: [] as string[], active: true, sort_order: '0',
   })
 
   const load = useCallback(async () => {
@@ -30,7 +30,7 @@ export default function BundlesPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ amount_sls: '', bundle_name: '', data_amount: '', data_unit: 'GB', ussd_option: '', ussd_code: '', active: true, sort_order: '0' })
+    setForm({ amount_sls: '', bundle_name: '', data_amount: '', data_unit: 'GB', ussd_option: '', ussd_code: '', ussd_replies: [], active: true, sort_order: '0' })
     setShowModal(true)
   }
 
@@ -43,6 +43,7 @@ export default function BundlesPage() {
       data_unit:   b.data_unit,
       ussd_option: b.ussd_option,
       ussd_code:   b.ussd_code,
+      ussd_replies: b.ussd_replies || [],
       active:      b.active,
       sort_order:  String(b.sort_order),
     })
@@ -65,6 +66,7 @@ export default function BundlesPage() {
         data_unit:   form.data_unit,
         ussd_option: form.ussd_option,
         ussd_code:   form.ussd_code,
+        ussd_replies: form.ussd_replies,
         active:      form.active,
         sort_order:  parseInt(form.sort_order) || 0,
       }
@@ -218,18 +220,48 @@ export default function BundlesPage() {
                   <span className="form-hint">Supports <code>{'{somtel_number}'}</code>, <code>{'{pin}'}</code>, <code>{'{bundle_option}'}</code></span>
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Sort Order</label>
-                  <input type="number" className="form-input" value={form.sort_order} onChange={e => setForm(f => ({ ...f, sort_order: e.target.value }))} />
+              <div className="form-group" style={{ marginTop: 'var(--space-2)' }}>
+                <label className="form-label">Tallaabooyinka Xiga (Follow-up Replies)</label>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
+                  Halkan ku dar haddii xirmadani u baahan tahay in la sii doorto nambaro is xiga marka la garaaco koodhka kore (Tusaale: Reply 1, ka dib Reply 3, iwm).
                 </div>
-                <div className="form-group" style={{ justifyContent: 'flex-end' }}>
-                  <label className="form-label">Active</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  {form.ussd_replies.map((reply, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <input 
+                        className="form-input" 
+                        value={reply} 
+                        onChange={e => {
+                          const newReplies = [...form.ussd_replies]
+                          newReplies[idx] = e.target.value
+                          setForm(f => ({ ...f, ussd_replies: newReplies }))
+                        }}
+                        placeholder={`Reply ${idx + 1} (Tusaale: 1)`} 
+                        style={{ fontFamily: 'monospace' }} 
+                      />
+                      <button className="btn btn-secondary btn-icon" onClick={() => {
+                        const newReplies = form.ussd_replies.filter((_, i) => i !== idx)
+                        setForm(f => ({ ...f, ussd_replies: newReplies }))
+                      }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  className="btn btn-secondary btn-sm" 
+                  style={{ marginTop: 'var(--space-2)', alignSelf: 'flex-start' }}
+                  onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, ''] }))}
+                >
+                  + Ku dar Reply (Tusaale: 1)
+                </button>
+              </div>
+              <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
+                <div className="form-group" style={{ justifyContent: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 'var(--space-3)' }}>
+                  <label className="form-label" style={{ marginBottom: 0 }}>Active</label>
                   <label className="toggle-wrapper">
                     <div className={`toggle-track${form.active ? ' on' : ''}`} onClick={() => setForm(f => ({ ...f, active: !f.active }))}>
                       <div className="toggle-thumb" />
                     </div>
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{form.active ? 'Active' : 'Disabled'}</span>
+                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{form.active ? 'Wuu furan yahay' : 'Wuu xidhan yahay'}</span>
                   </label>
                 </div>
               </div>

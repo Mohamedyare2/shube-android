@@ -60,6 +60,7 @@ export interface BundleRule {
   data_unit: DataUnit
   ussd_option: string
   ussd_code: string
+  ussd_replies?: string[]
   active: boolean
   sort_order: number
   created_at: string
