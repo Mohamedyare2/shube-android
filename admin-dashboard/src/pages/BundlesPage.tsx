@@ -111,7 +111,7 @@ export default function BundlesPage() {
           <h1 className="page-title">Bundle Rules</h1>
           <p className="page-subtitle">Configure amount → internet bundle → USSD code mappings</p>
         </div>
-        {isAdmin && <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>}
+        <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>
       </div>
 
       {/* Info box */}
@@ -159,7 +159,6 @@ export default function BundlesPage() {
                   <td><span className={`badge ${profileStatusClass(b.active ? 'active' : 'disabled')}`}>{b.active ? 'ACTIVE' : 'DISABLED'}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(b.updated_at)}</td>
                     <td>
-                    {isAdmin ? (
                       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                         <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
                         <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
@@ -167,9 +166,6 @@ export default function BundlesPage() {
                         </button>
                         <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
                       </div>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>View only</span>
-                    )}
                     </td>
                 </tr>
               ))}
@@ -210,15 +206,15 @@ export default function BundlesPage() {
                   </select>
                 </div>
               </div>
-              <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">USSD Option *</label>
                   <input className="form-input" value={form.ussd_option} onChange={e => setForm(f => ({ ...f, ussd_option: e.target.value }))} placeholder="05" />
-                  <span className="form-hint">The option number sent in the USSD flow.</span>
+                  <span className="form-hint">e.g. 05 or 1</span>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">USSD Code *</label>
-                  <input className="form-input" value={form.ussd_code} onChange={e => setForm(f => ({ ...f, ussd_code: e.target.value }))} placeholder="*106*2*2*1*2*05#" />
+                  <label className="form-label">USSD Code / Template *</label>
+                  <input className="form-input" style={{ fontFamily: 'monospace' }} value={form.ussd_code} onChange={e => setForm(f => ({ ...f, ussd_code: e.target.value }))} placeholder="*21*{somtel_number}*05*{pin}#" />
+                  <span className="form-hint">Supports <code>{'{somtel_number}'}</code>, <code>{'{pin}'}</code>, <code>{'{bundle_option}'}</code></span>
                 </div>
               </div>
               <div className="form-row">

@@ -118,9 +118,7 @@ export default function UssdConfigPage() {
           <h1 className="page-title">USSD Configuration</h1>
           <p className="page-subtitle">Manage Android automated USSD step workflows</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}
-          style={{ visibility: isAdmin ? 'visible' : 'hidden' }}
-        >+ Add Config</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ Add Config</button>
       </div>
 
       <div className="card">
@@ -171,17 +169,13 @@ export default function UssdConfigPage() {
                   </td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(c.updated_at)}</td>
                   <td>
-                    {isAdmin ? (
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
-                        <button className={`btn btn-sm ${c.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(c)}>
-                          {c.active ? 'Disable' : 'Enable'}
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Delete</button>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>View only</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
+                      <button className={`btn btn-sm ${c.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(c)}>
+                        {c.active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -221,9 +215,14 @@ export default function UssdConfigPage() {
 
               <div className="form-group">
                 <label className="form-label">Workflow Steps (JSON Array) *</label>
+                <div style={{ background: 'var(--bg-surface-2)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-2)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  💡 <strong>Available Variables:</strong> <code>{'{somtel_number}'}</code> (Customer Somtel #), <code>{'{pin}'}</code> (Wallet PIN), <code>{'{bundle_option}'}</code> (Option code).
+                  <br />
+                  💡 <strong>Step Types:</strong> <code>DIAL</code> (Dial USSD), <code>SEND_REPLY</code> (Enter 1, 2, etc.), <code>ENTER_NUMBER</code> (Enter Somtel #), <code>ENTER_PIN</code> (Enter PIN), <code>READ_RESPONSE</code>.
+                </div>
                 <textarea
                   className="form-input"
-                  style={{ fontFamily: 'monospace', minHeight: 250, resize: 'vertical' }}
+                  style={{ fontFamily: 'monospace', minHeight: 250, resize: 'vertical', fontSize: '0.85rem' }}
                   value={form.stepsStr}
                   onChange={e => setForm(f => ({ ...f, stepsStr: e.target.value }))}
                 />

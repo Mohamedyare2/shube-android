@@ -125,7 +125,7 @@ export default function SmsParserPage() {
           <h1 className="page-title">SMS Parser Configuration</h1>
           <p className="page-subtitle">Configure regex patterns to extract payment details from incoming SMS</p>
         </div>
-        {isAdmin && <button className="btn btn-primary" onClick={openCreate}>+ Add Parser</button>}
+        <button className="btn btn-primary" onClick={openCreate}>+ Add Parser</button>
       </div>
 
       <div className="card">
@@ -177,17 +177,13 @@ export default function SmsParserPage() {
                   </td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(p.updated_at)}</td>
                   <td>
-                    {isAdmin ? (
-                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}>Edit</button>
-                        <button className={`btn btn-sm ${p.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(p)}>
-                          {p.active ? 'Disable' : 'Enable'}
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(p)}>Delete</button>
-                      </div>
-                    ) : (
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>View only</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(p)}>Edit</button>
+                      <button className={`btn btn-sm ${p.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(p)}>
+                        {p.active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(p)}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
