@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 interface NavItem {
@@ -30,9 +30,21 @@ const OPERATOR_NAV_ITEMS: NavItem[] = [
   { path: '/devices',        icon: '📱', label: 'My Devices' },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean
+  onClose?: () => void
+}
+
+export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { profile, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Close sidebar on navigation (mobile)
+  React.useEffect(() => {
+    onClose?.()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
 
   async function handleSignOut() {
     await signOut()
@@ -50,7 +62,7 @@ export default function Sidebar() {
   const roleLabel = isAdmin ? 'Admin' : 'Operator'
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">S</div>
         <div>
