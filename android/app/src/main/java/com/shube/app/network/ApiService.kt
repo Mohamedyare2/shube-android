@@ -117,13 +117,45 @@ class ApiService(private val context: Context) {
         }
 
     private fun getBatteryLevel(): Int {
-        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        return bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        // Method 1: IntentFilter sticky broadcast (most reliable on most devices)
+        try {
+            val ifilter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+            val intent = context.registerReceiver(null, ifilter)
+            if (intent != null) {
+                val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+                if (level > 0 && scale > 0) {
+                    val pct = (level * 100f / scale).toInt()
+                    Log.d("ApiService", "Battery (method1): $pct%  level=$level scale=$scale")
+                    return pct
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ApiService", "Battery method1 failed: ${e.message}")
+        }
+
+        // Method 2: BatteryManager.BATTERY_PROPERTY_CAPACITY
+        try {
+            val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
+            val cap = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (cap > 0) {
+                Log.d("ApiService", "Battery (method2): $cap%")
+                return cap
+            }
+        } catch (e: Exception) {
+            Log.w("ApiService", "Battery method2 failed: ${e.message}")
+        }
+
+        Log.w("ApiService", "Battery: could not read — returning -1 as sentinel")
+        return -1 // Sentinel so server knows the read failed
     }
 
     private fun getIsCharging(): Boolean {
-        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        return bm.isCharging
+        val intentFilter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = context.registerReceiver(null, intentFilter)
+        val status = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        return status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+               status == android.os.BatteryManager.BATTERY_STATUS_FULL
     }
 
     private fun getNetworkType(): String {

@@ -264,17 +264,22 @@ app.post("/api/devices/heartbeat", async (req, res) => {
   if (!device_id) return res.status(400).json({ error: "device_id required" });
 
   try {
+    // Only include battery_level in the update if it's a valid reading (> 0)
+    const patch = {
+      is_charging: is_charging || false,
+      network_type: network_type || 'UNKNOWN',
+      is_online: true,
+      status: 'online',
+      last_ping_at: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
+    };
+    if (battery_level && battery_level > 0) {
+      patch.battery_level = battery_level;
+    }
+
     await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}`, {
       method: "PATCH",
-      body: JSON.stringify({
-        battery_level: battery_level || 0,
-        is_charging: is_charging || false,
-        network_type: network_type || 'UNKNOWN',
-        is_online: true,
-        status: 'online',
-        last_ping_at: new Date().toISOString(),
-        last_seen: new Date().toISOString(),
-      }),
+      body: JSON.stringify(patch),
     });
     return res.json({ success: true });
   } catch (err) {

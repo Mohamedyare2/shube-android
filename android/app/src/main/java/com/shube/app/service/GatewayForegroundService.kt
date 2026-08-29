@@ -18,6 +18,8 @@ import com.shube.app.ussd.UssdStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class GatewayForegroundService : Service() {
@@ -34,6 +36,8 @@ class GatewayForegroundService : Service() {
         private const val CHANNEL_ID = "shube_gateway_channel"
     }
 
+    private var heartbeatJob: kotlinx.coroutines.Job? = null
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -44,8 +48,10 @@ class GatewayForegroundService : Service() {
             ACTION_START_GATEWAY -> {
                 startForeground(NOTIFICATION_ID, createNotification("Gateway Active", "Listening for payments..."))
                 Log.d("GatewayService", "Gateway started")
+                startHeartbeatLoop()
             }
             ACTION_STOP_GATEWAY -> {
+                heartbeatJob?.cancel()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 Log.d("GatewayService", "Gateway stopped")
@@ -65,6 +71,20 @@ class GatewayForegroundService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    private fun startHeartbeatLoop() {
+        heartbeatJob?.cancel()
+        heartbeatJob = scope.launch {
+            val api = com.shube.app.network.ApiService.getInstance(this@GatewayForegroundService)
+            val prefs = DevicePreferences.getInstance(this@GatewayForegroundService)
+            while (isActive) {
+                prefs.deviceId?.let { id ->
+                    api.sendHeartbeat(id)
+                }
+                delay(60_000) // 1 minute
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
