@@ -35,7 +35,7 @@ export default function OperatorsPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('operators')
-      .select(`*, profile:profiles!profile_id(*)`)
+      .select(`*, profile:profiles!operators_profile_id_fkey(*)`)
       .order('created_at', { ascending: false })
     
     if (error) {
