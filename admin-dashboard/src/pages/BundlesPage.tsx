@@ -222,9 +222,9 @@ export default function BundlesPage() {
               </div>
               <div className="form-group" style={{ marginTop: 'var(--space-2)' }}>
                 <label className="form-label">Tallaabooyinka Xiga (Follow-up Replies)</label>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Halkan ku dar haddii xidhmada aad u baahan tahay in la sii doorto nambaro is xiga marka la garaaco koodhka kore (Tusaale: Reply 1, ka dib Reply 3, iwm).
-                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)', lineHeight: 1.5 }}>
+                  Halkan ku dar haddii xidhmadani u baahan tahay in la sii doorto nambaro is xiga marka la garaaco koodhka kore (Tusaale: Reply 1, ka dib Reply 3, iwm).
+                </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                   {form.ussd_replies.map((reply, idx) => (
                     <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)' }}>

@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">SHUBE Gateway</string>
+    <string name="app_name">SHUBE</string>
     <string name="accessibility_service_description">Required by SHUBE to automate multi-step USSD transactions for automated internet bundle recharge. This service intercepts USSD dialogs and enters the required numbers automatically.</string>
 </resources>
