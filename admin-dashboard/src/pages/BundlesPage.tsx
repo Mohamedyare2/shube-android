@@ -206,6 +206,7 @@ export default function BundlesPage() {
                   </select>
                 </div>
               </div>
+              <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">USSD Option *</label>
                   <input className="form-input" value={form.ussd_option} onChange={e => setForm(f => ({ ...f, ussd_option: e.target.value }))} placeholder="05" />
