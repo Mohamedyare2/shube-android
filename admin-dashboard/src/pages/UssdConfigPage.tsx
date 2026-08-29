@@ -3,9 +3,11 @@ import { supabase } from '../lib/supabase'
 import type { UssdConfig } from '../types/database'
 import { formatDate, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function UssdConfigPage() {
   const { toast } = useToast()
+  const { isAdmin } = useAuth()
   const [configs, setConfigs] = useState<UssdConfig[]>([])
   const [loading, setLoading] = useState(true)
   
@@ -116,7 +118,9 @@ export default function UssdConfigPage() {
           <h1 className="page-title">USSD Configuration</h1>
           <p className="page-subtitle">Manage Android automated USSD step workflows</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add Config</button>
+        <button className="btn btn-primary" onClick={openCreate}
+          style={{ visibility: isAdmin ? 'visible' : 'hidden' }}
+        >+ Add Config</button>
       </div>
 
       <div className="card">
@@ -167,13 +171,17 @@ export default function UssdConfigPage() {
                   </td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(c.updated_at)}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
-                      <button className={`btn btn-sm ${c.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(c)}>
-                        {c.active ? 'Disable' : 'Enable'}
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Delete</button>
-                    </div>
+                    {isAdmin ? (
+                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>Edit</button>
+                        <button className={`btn btn-sm ${c.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(c)}>
+                          {c.active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(c)}>Delete</button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>View only</span>
+                    )}
                   </td>
                 </tr>
               ))}

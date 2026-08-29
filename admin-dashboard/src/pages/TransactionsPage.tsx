@@ -5,6 +5,7 @@ import {
   formatSLS, formatDateTime, formatDate, txStatusClass, txStatusLabel,
   duration, exportCsv
 } from '../lib/utils'
+import { useAuth } from '../contexts/AuthContext'
 
 const STATUS_OPTIONS = [
   'all', 'success', 'failed', 'pending', 'processing',
@@ -15,6 +16,14 @@ const STATUS_OPTIONS = [
 const PAGE_SIZE = 25
 
 export default function TransactionsPage() {
+  const { isOperator, user } = useAuth()
+  // Resolve operator row id once
+  const [operatorRowId, setOperatorRowId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!isOperator || !user?.id) return
+    supabase.from('operators').select('id').eq('profile_id', user.id).single()
+      .then(({ data }) => { if (data) setOperatorRowId(data.id) })
+  }, [isOperator, user?.id])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -35,6 +44,9 @@ export default function TransactionsPage() {
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
+    // Scope to operator's own transactions
+    if (isOperator && operatorRowId) q = q.eq('operator_id', operatorRowId)
+
     if (statusFilter !== 'all') q = q.eq('status', statusFilter)
     if (search) q = q.or(`telesom_number.ilike.%${search}%,somtel_number.ilike.%${search}%,telesom_transaction_id.ilike.%${search}%`)
     if (dateFrom) q = q.gte('created_at', dateFrom)
@@ -44,7 +56,7 @@ export default function TransactionsPage() {
     if (data) setTransactions(data as Transaction[])
     if (count !== null) setTotal(count)
     setLoading(false)
-  }, [page, statusFilter, search, dateFrom, dateTo])
+  }, [page, statusFilter, search, dateFrom, dateTo, isOperator, operatorRowId])
 
   useEffect(() => { load() }, [load])
 
@@ -69,11 +81,13 @@ export default function TransactionsPage() {
   }
 
   async function handleExport() {
-    const { data } = await supabase
+    let q = supabase
       .from('transactions')
       .select('id,telesom_number,amount_sls,currency,telesom_transaction_id,somtel_number,status,failure_reason,created_at,completed_at,test_mode')
       .order('created_at', { ascending: false })
       .limit(10000)
+    if (isOperator && operatorRowId) q = q.eq('operator_id', operatorRowId)
+    const { data } = await q
     if (data) exportCsv(data, 'shube_transactions')
   }
 
@@ -91,7 +105,7 @@ export default function TransactionsPage() {
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
-          <h1 className="page-title">Transactions</h1>
+          <h1 className="page-title">{isOperator ? 'My Transactions' : 'All Transactions'}</h1>
           <p className="page-subtitle">{total.toLocaleString()} total transactions</p>
         </div>
         <button className="btn btn-secondary" onClick={handleExport}>📥 Export CSV</button>

@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import type { DashboardStats, Operator } from '../types/database'
+import type { DashboardStats } from '../types/database'
 import { formatSLS, formatNumber } from '../lib/utils'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { format, subDays, startOfDay, endOfDay } from 'date-fns'
+import { useAuth } from '../contexts/AuthContext'
 
 const STAT_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#8b5cf6', '#ec4899', '#f97316']
 
 export default function ReportsPage() {
+  const { isOperator, user } = useAuth()
   const [loading, setLoading] = useState(true)
+  const [operatorRowId, setOperatorRowId] = useState<string | null>(null)
   
   const [dateRange, setDateRange] = useState({
     from: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
@@ -19,42 +22,55 @@ export default function ReportsPage() {
   const [operatorStats, setOperatorStats] = useState<{ name: string; success: number; failed: number }[]>([])
   const [bundleStats, setBundleStats] = useState<{ name: string; value: number }[]>([])
 
+  // Resolve operator row id for scoping
+  useEffect(() => {
+    if (!isOperator || !user?.id) return
+    supabase.from('operators').select('id').eq('profile_id', user.id).single()
+      .then(({ data }) => { if (data) setOperatorRowId(data.id) })
+  }, [isOperator, user?.id])
+
   const loadReport = useCallback(async () => {
     setLoading(true)
     
     const fromDate = startOfDay(new Date(dateRange.from)).toISOString()
     const toDate = endOfDay(new Date(dateRange.to)).toISOString()
 
-    // 1. Overall stats
-    const { data: statsData } = await supabase.rpc('get_dashboard_stats', { 
-      p_from_date: fromDate, 
-      p_to_date: toDate 
-    })
-    if (statsData) setStats(statsData as unknown as DashboardStats)
+    // 1. Overall stats — use operator-scoped RPC if operator
+    if (isOperator && operatorRowId) {
+      const { data: statsData } = await supabase.rpc('get_operator_stats', {
+        p_operator_id: operatorRowId,
+        p_from_date: fromDate,
+        p_to_date: toDate
+      })
+      if (statsData) setStats(statsData as unknown as DashboardStats)
+    } else if (!isOperator) {
+      const { data: statsData } = await supabase.rpc('get_dashboard_stats', { 
+        p_from_date: fromDate, 
+        p_to_date: toDate 
+      })
+      if (statsData) setStats(statsData as unknown as DashboardStats)
+    }
 
-    // 2. Operator Performance
-    // Instead of looping RPC, let's just group transactions directly for this period
-    const { data: txns } = await supabase
+    // 2. Transactions for charts
+    let txQ = supabase
       .from('transactions')
       .select('status, operator_id, bundle_rule:bundle_rules(bundle_name), operator:operators(username)')
       .gte('created_at', fromDate)
       .lte('created_at', toDate)
       .eq('test_mode', false)
+    if (isOperator && operatorRowId) txQ = txQ.eq('operator_id', operatorRowId)
+    const { data: txns } = await txQ
 
     if (txns) {
-      // Group by Operator
       const opMap: Record<string, { success: number; failed: number }> = {}
-      // Group by Bundle
       const bndMap: Record<string, number> = {}
 
       txns.forEach(tx => {
-        // Operator logic
         const opName = (tx.operator as { username?: string })?.username || 'System/Unknown'
         if (!opMap[opName]) opMap[opName] = { success: 0, failed: 0 }
         if (tx.status === 'success') opMap[opName].success++
         else if (tx.status === 'failed') opMap[opName].failed++
 
-        // Bundle logic
         if (tx.status === 'success') {
           const bName = (tx.bundle_rule as { bundle_name?: string })?.bundle_name || 'Custom/Unknown'
           if (!bndMap[bName]) bndMap[bName] = 0
@@ -67,7 +83,7 @@ export default function ReportsPage() {
     }
 
     setLoading(false)
-  }, [dateRange])
+  }, [dateRange, isOperator, operatorRowId])
 
   useEffect(() => { loadReport() }, [loadReport])
 
@@ -85,7 +101,7 @@ export default function ReportsPage() {
       <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 className="page-title">Reports & Analytics</h1>
-          <p className="page-subtitle">Analyze transaction performance and operator metrics</p>
+          <p className="page-subtitle">{isOperator ? 'Your transaction performance and bundle metrics' : 'Analyze transaction performance and operator metrics'}</p>
         </div>
         
         <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', background: 'var(--bg-surface)', padding: 'var(--space-2) var(--space-4)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-default)' }}>
@@ -129,6 +145,8 @@ export default function ReportsPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 'var(--space-6)' }}>
             
+            {/* Operator Performance chart — only meaningful for admins */}
+            {!isOperator && (
             <div className="card">
               <div className="card-header">
                 <div className="card-title">Operator Performance</div>
@@ -151,6 +169,7 @@ export default function ReportsPage() {
                 )}
               </div>
             </div>
+            )}
 
             <div className="card">
               <div className="card-header">

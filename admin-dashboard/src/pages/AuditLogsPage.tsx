@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import type { AuditLog } from '../types/database'
 import { formatTime } from '../lib/utils'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function AuditLogsPage() {
+  const { user, isOperator } = useAuth()
   const [logs, setLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
@@ -11,15 +13,17 @@ export default function AuditLogsPage() {
 
   const loadLogs = useCallback(async (pageIndex: number) => {
     setLoading(true)
-    const { data } = await supabase
+    let q = supabase
       .from('audit_logs')
       .select('*, actor:profiles(full_name)')
       .order('created_at', { ascending: false })
       .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1)
-    
+    // Scope operator to their own log entries
+    if (isOperator && user?.id) q = q.eq('actor_id', user.id)
+    const { data } = await q
     if (data) setLogs(data as unknown as AuditLog[])
     setLoading(false)
-  }, [])
+  }, [isOperator, user?.id])
 
   useEffect(() => { loadLogs(page) }, [loadLogs, page])
 
@@ -27,8 +31,8 @@ export default function AuditLogsPage() {
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">Audit Logs</h1>
-          <p className="page-subtitle">Track system events and operator activities</p>
+          <h1 className="page-title">{isOperator ? 'My Activity Logs' : 'Audit Logs'}</h1>
+          <p className="page-subtitle">{isOperator ? 'Track your own system actions' : 'Track system events and operator activities'}</p>
         </div>
       </div>
 

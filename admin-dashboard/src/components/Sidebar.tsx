@@ -25,9 +25,15 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
 ]
 
 const OPERATOR_NAV_ITEMS: NavItem[] = [
-  { section: 'My Business',  path: '/dashboard',    icon: '📊', label: 'Dashboard' },
-  { path: '/transactions',   icon: '💳', label: 'My Transactions' },
-  { path: '/devices',        icon: '📱', label: 'My Devices' },
+  { section: 'Overview',      path: '/dashboard',    icon: '📊', label: 'Dashboard' },
+  { path: '/transactions',    icon: '💳', label: 'Transactions' },
+  { section: 'Management',   path: '/devices',       icon: '📱', label: 'My Devices' },
+  { path: '/customers',       icon: '👥', label: 'Customers' },
+  { path: '/bundles',         icon: '📦', label: 'Bundle Rules' },
+  { section: 'Configuration', path: '/ussd-config',  icon: '⚙️', label: 'USSD Config' },
+  { path: '/sms-parser',      icon: '📩', label: 'SMS Parser' },
+  { section: 'Reporting',     path: '/reports',      icon: '📈', label: 'Reports' },
+  { path: '/audit-logs',      icon: '📋', label: 'Audit Logs' },
 ]
 
 interface SidebarProps {

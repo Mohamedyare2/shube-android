@@ -9,7 +9,7 @@ const PAGE_SIZE = 25
 
 export default function CustomersPage() {
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, isOperator } = useAuth()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -28,12 +28,14 @@ export default function CustomersPage() {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    // Scope operator to their own customers
+    if (isOperator && user?.id) q = q.eq('created_by', user.id)
     if (search) q = q.or(`customer_name.ilike.%${search}%,telesom_number.ilike.%${search}%,somtel_number.ilike.%${search}%`)
     const { data, count } = await q
     if (data) setCustomers(data)
     if (count !== null) setTotal(count)
     setLoading(false)
-  }, [page, search])
+  }, [page, search, isOperator, user?.id])
 
   useEffect(() => { load() }, [load])
 
@@ -69,7 +71,7 @@ export default function CustomersPage() {
           active:         form.active,
         }).eq('id', editing.id)
         if (error) throw error
-        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: 'admin', action: 'customer_updated', resource_type: 'customer', resource_id: editing.id, description: `Updated ${form.customer_name} (${form.telesom_number})` })
+        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_updated', resource_type: 'customer', resource_id: editing.id, description: `Updated ${form.customer_name} (${form.telesom_number})` })
         toast('Customer updated', 'success')
       } else {
         const { error } = await supabase.from('customers').insert({
@@ -84,7 +86,7 @@ export default function CustomersPage() {
           if (error.code === '23505') throw new Error('A customer with this Telesom number already exists.')
           throw error
         }
-        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: 'admin', action: 'customer_added', resource_type: 'customer', description: `Added ${form.customer_name} (${form.telesom_number})` })
+        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_added', resource_type: 'customer', description: `Added ${form.customer_name} (${form.telesom_number})` })
         toast('Customer added', 'success')
       }
       setShowModal(false)
@@ -100,7 +102,7 @@ export default function CustomersPage() {
   async function handleDelete(c: Customer) {
     const { error } = await supabase.from('customers').delete().eq('id', c.id)
     if (error) { toast(error.message, 'error'); return }
-    await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: 'admin', action: 'customer_deleted', resource_type: 'customer', resource_id: c.id, description: `Deleted ${c.customer_name} (${c.telesom_number})` })
+    await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_deleted', resource_type: 'customer', resource_id: c.id, description: `Deleted ${c.customer_name} (${c.telesom_number})` })
     toast('Customer deleted', 'success')
     setDeleteConfirm(null)
     load()
@@ -112,7 +114,7 @@ export default function CustomersPage() {
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">Customers</h1>
+          <h1 className="page-title">{isOperator ? 'My Customers' : 'Customers'}</h1>
           <p className="page-subtitle">{total.toLocaleString()} customer mappings</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>+ Add Customer</button>

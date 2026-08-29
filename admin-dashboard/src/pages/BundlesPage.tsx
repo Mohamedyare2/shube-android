@@ -3,9 +3,11 @@ import { supabase } from '../lib/supabase'
 import type { BundleRule } from '../types/database'
 import { formatSLS, formatDate, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function BundlesPage() {
   const { toast } = useToast()
+  const { isAdmin } = useAuth()
   const [bundles, setBundles] = useState<BundleRule[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -109,7 +111,7 @@ export default function BundlesPage() {
           <h1 className="page-title">Bundle Rules</h1>
           <p className="page-subtitle">Configure amount → internet bundle → USSD code mappings</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>
+        {isAdmin && <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>}
       </div>
 
       {/* Info box */}
@@ -156,15 +158,19 @@ export default function BundlesPage() {
                   <td className="table-mono" style={{ color: 'var(--brand-primary)' }}>{b.ussd_code}</td>
                   <td><span className={`badge ${profileStatusClass(b.active ? 'active' : 'disabled')}`}>{b.active ? 'ACTIVE' : 'DISABLED'}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(b.updated_at)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
-                      <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
-                        {b.active ? 'Disable' : 'Enable'}
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
-                    </div>
-                  </td>
+                    <td>
+                    {isAdmin ? (
+                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
+                        <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
+                          {b.active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>View only</span>
+                    )}
+                    </td>
                 </tr>
               ))}
             </tbody>
