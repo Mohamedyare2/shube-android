@@ -267,9 +267,12 @@ app.post("/api/devices/heartbeat", async (req, res) => {
     await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}`, {
       method: "PATCH",
       body: JSON.stringify({
-        battery_level: battery_level || null,
+        battery_level: battery_level || 0,
         is_charging: is_charging || false,
-        status: 'online', // Keep this, as network_type isn't in DB
+        network_type: network_type || 'UNKNOWN',
+        is_online: true,
+        status: 'online',
+        last_ping_at: new Date().toISOString(),
         last_seen: new Date().toISOString(),
       }),
     });

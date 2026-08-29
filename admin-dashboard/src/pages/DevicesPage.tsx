@@ -195,13 +195,26 @@ export default function DevicesPage() {
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       Last seen: {lastActivity ? timeAgo(lastActivity) : 'Never'}
                     </span>
-                    {!isOperator && (
+                    {!isOperator ? (
                       <button
                         className={`btn ${dev.revoked ? 'btn-secondary' : 'btn-danger'}`}
                         style={{ padding: '4px 12px', fontSize: '0.75rem' }}
                         onClick={() => toggleRevoke(dev)}
                       >
                         {dev.revoked ? 'Restore' : 'Revoke'}
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-danger"
+                        style={{ padding: '4px 12px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--brand-danger)', color: 'var(--brand-danger)' }}
+                        onClick={async () => {
+                          if (!window.confirm("Ma hubtaa inaad tirtirto device-kan?")) return
+                          const { error } = await supabase.from('devices').delete().eq('id', dev.id)
+                          if (error) toast(error.message, 'error')
+                          else { toast("Device la tirtiray", "success"); load() }
+                        }}
+                      >
+                        Delete
                       </button>
                     )}
                   </div>
