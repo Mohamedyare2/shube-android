@@ -6,7 +6,7 @@ import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
 // Flask admin API — handles privileged Supabase Auth operations
-const ADMIN_API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5050'
+const ADMIN_API_URL = ''
 
 interface OperatorWithProfile extends Operator {
   profile: Profile
@@ -106,7 +106,7 @@ export default function OperatorsPage() {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) throw new Error('Not authenticated')
 
-        const res = await fetch(`${ADMIN_API_URL}/api/operators`, {
+        const res = await fetch(`/api/operators`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -164,7 +164,7 @@ export default function OperatorsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const res = await fetch(`${ADMIN_API_URL}/api/operators/reset-password`, {
+      const res = await fetch(`/api/operators/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,7 +204,7 @@ export default function OperatorsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const res = await fetch(`${ADMIN_API_URL}/api/operators/${op.profile_id}`, {
+      const res = await fetch(`/api/operators/${op.profile_id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

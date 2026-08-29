@@ -212,11 +212,18 @@ app.post("/api/devices/generate-pairing", async (req, res) => {
 
   try {
     const pairing_code = Math.floor(100000 + Math.random() * 900000).toString();
+    // We use device_identifier to store the pairing code temporarily because pairing_code column doesn't exist
+    const temp_identifier = `PAIR-${pairing_code}`;
+    
     const resp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices`, {
       method: "POST",
-      body: JSON.stringify({ device_name, operator_id, pairing_code, is_online: false }),
+      body: JSON.stringify({ device_name, operator_id, device_identifier: temp_identifier, status: 'offline' }),
     });
-    if (!resp.ok) return res.status(resp.status).json({ error: "Failed to generate pairing code" });
+    
+    if (!resp.ok) {
+      const errData = await resp.json().catch(()=>({}));
+      return res.status(resp.status).json({ error: errData.message || "Failed to generate pairing code" });
+    }
     return res.json({ pairing_code });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -225,21 +232,24 @@ app.post("/api/devices/generate-pairing", async (req, res) => {
 
 // 2. Pair Device (Called by Android App)
 app.post("/api/devices/pair", async (req, res) => {
-  const { pairing_code } = req.body || {};
+  const { pairing_code, device_identifier } = req.body || {};
   if (!pairing_code) return res.status(400).json({ error: "pairing_code required" });
 
   try {
-    // Find device by code
-    const getResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?pairing_code=eq.${pairing_code}&select=*`);
+    // Find device by temp pairing identifier
+    const temp_identifier = `PAIR-${pairing_code}`;
+    const getResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${temp_identifier}&select=*`);
     const devices = await getResp.json();
     if (!devices || devices.length === 0) return res.status(404).json({ error: "Invalid pairing code" });
 
     const device = devices[0];
     
-    // Clear pairing code after successful pair (one-time use)
+    // Update device_identifier to the real one, and set online
+    const real_identifier = device_identifier || `DEV-${device.id}`; // Fallback if android doesn't send one
+    
     await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device.id}`, {
       method: "PATCH",
-      body: JSON.stringify({ pairing_code: null, is_online: true, last_ping_at: new Date().toISOString() }),
+      body: JSON.stringify({ device_identifier: real_identifier, status: 'online', last_seen: new Date().toISOString() }),
     });
 
     return res.json({ success: true, device_id: device.id, operator_id: device.operator_id });

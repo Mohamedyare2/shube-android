@@ -44,9 +44,8 @@ class DevicePreferences(context: Context) {
         private const val KEY_SERVER_URL  = "server_url"
         private const val KEY_DEVICE_NAME = "device_name"
 
-        // Change this to your computer's local IP when testing on the same WiFi
-        // Example: "http://192.168.1.105:5050"
-        const val DEFAULT_SERVER_URL = "http://10.0.2.2:5050" // Android emulator localhost
+        // Points to the live Vercel deployment — no local PC needed!
+        const val DEFAULT_SERVER_URL = "https://shube-android.vercel.app"
 
         @Volatile private var instance: DevicePreferences? = null
 

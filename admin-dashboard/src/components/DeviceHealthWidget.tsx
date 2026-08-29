@@ -4,7 +4,6 @@ import { Battery, BatteryCharging, Smartphone, Wifi, WifiOff } from "lucide-reac
 export function DeviceHealthWidget({ operatorId }: { operatorId: string }) {
   const [device, setDevice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const API_URL = import.meta.env.VITE_ADMIN_API_URL || "http://localhost:5050";
 
   useEffect(() => {
     const fetchDeviceStatus = async () => {
@@ -13,7 +12,7 @@ export function DeviceHealthWidget({ operatorId }: { operatorId: string }) {
         const parsedToken = token ? JSON.parse(token) : null;
         const jwt = parsedToken?.currentSession?.access_token;
 
-        const res = await fetch(`${API_URL}/api/devices/status?operator_id=${operatorId}`, {
+        const res = await fetch(`/api/devices/status?operator_id=${operatorId}`, {
           headers: { Authorization: `Bearer ${jwt}` },
         });
         

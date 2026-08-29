@@ -2,6 +2,7 @@ package com.shube.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -133,9 +134,9 @@ class UssdAccessibilityService : AccessibilityService() {
         Log.w("UssdAccessibility", "Service interrupted")
     }
 
-    override fun onUnbind(intent: Intent?): Boolean {
+    override fun onDestroy() {
         isServiceActive = false
         Log.d("UssdAccessibility", "Service unbound")
-        return super.onUnbind(intent)
+        super.onDestroy()
     }
 }

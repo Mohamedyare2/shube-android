@@ -4,6 +4,9 @@ android/app/build/
 android/local.properties
 android/captures/
 android/.cxx/
+android/.idea/
+android/build/
+**/*.hprof
 
 # Admin dashboard
 admin-dashboard/node_modules/

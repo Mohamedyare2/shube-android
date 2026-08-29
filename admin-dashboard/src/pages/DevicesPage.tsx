@@ -5,7 +5,7 @@ import { formatDateTime, timeAgo } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
-const ADMIN_API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:5050'
+const ADMIN_API_URL = ''
 
 export default function DevicesPage() {
   const { toast } = useToast()
@@ -60,7 +60,7 @@ export default function DevicesPage() {
     setPairingLoading(true)
     try {
       const jwt = session?.access_token
-      const res = await fetch(`${ADMIN_API_URL}/api/devices/generate-pairing`, {
+      const res = await fetch(`/api/devices/generate-pairing`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
