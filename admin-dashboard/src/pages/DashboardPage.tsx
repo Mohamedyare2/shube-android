@@ -4,48 +4,67 @@ import type { Transaction, Device, DashboardStats } from '../types/database'
 import { formatSLS, formatNumber, formatTime, txStatusClass, txStatusLabel, deviceStatusClass, timeAgo } from '../lib/utils'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
-import OperatorDashboardPage from './OperatorDashboardPage'
 
 const STAT_COLORS = ['#3b82f6', '#22c55e', '#ef4444', '#eab308', '#8b5cf6']
 
 export default function DashboardPage() {
-  const { isOperator } = useAuth()
+  const { isOperator, user } = useAuth()
+  const [operatorRowId, setOperatorRowId] = useState<string | null>(null)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [chartData, setChartData] = useState<{ name: string; success: number; failed: number; total: number }[]>([])
-  const [loading, setLoading] = useState(!isOperator) // Don't block loading if operator
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!isOperator || !user?.id) return
+    supabase.from('operators').select('id').eq('profile_id', user.id).single()
+      .then(({ data }) => { if (data) setOperatorRowId(data.id) })
+  }, [isOperator, user?.id])
 
   const loadData = useCallback(async () => {
-    if (isOperator) return; // Skip loading admin data for operators
+    if (isOperator && !operatorRowId) return; // Wait until operatorRowId is resolved
     // Dashboard stats
-    const { data: statsData } = await supabase.rpc('get_dashboard_stats')
+    let statsData;
+    if (isOperator && operatorRowId) {
+      const res = await supabase.rpc('get_operator_stats', { p_operator_id: operatorRowId })
+      statsData = res.data
+    } else {
+      const res = await supabase.rpc('get_dashboard_stats')
+      statsData = res.data
+    }
     if (statsData) setStats(statsData as unknown as DashboardStats)
 
     // Recent transactions (live)
-    const { data: txns } = await supabase
+    let txQ = supabase
       .from('transactions')
       .select(`*, bundle_rule:bundle_rules(bundle_name, data_amount, data_unit), operator:operators(username)`)
       .order('created_at', { ascending: false })
       .limit(20)
+    if (isOperator && operatorRowId) txQ = txQ.eq('operator_id', operatorRowId)
+    const { data: txns } = await txQ
     if (txns) setRecentTxns(txns as Transaction[])
 
     // Devices
-    const { data: devData } = await supabase
+    let devQ = supabase
       .from('devices')
       .select(`*, operator:operators(username)`)
       .order('last_seen', { ascending: false })
       .limit(12)
+    if (isOperator && operatorRowId) devQ = devQ.eq('operator_id', operatorRowId)
+    const { data: devData } = await devQ
     if (devData) setDevices(devData as Device[])
 
     // Last 7 days chart data
     const sevenDaysAgo = new Date()
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-    const { data: txChart } = await supabase
+    let chartQ = supabase
       .from('transactions')
       .select('status, created_at')
       .gte('created_at', sevenDaysAgo.toISOString())
       .eq('test_mode', false)
+    if (isOperator && operatorRowId) chartQ = chartQ.eq('operator_id', operatorRowId)
+    const { data: txChart } = await chartQ
 
     if (txChart) {
       const byDay: Record<string, { success: number; failed: number; total: number }> = {}
@@ -66,7 +85,7 @@ export default function DashboardPage() {
     }
 
     setLoading(false)
-  }, [])
+  }, [isOperator, operatorRowId])
 
   useEffect(() => {
     loadData()
@@ -80,10 +99,6 @@ export default function DashboardPage() {
 
     return () => { supabase.removeChannel(txChannel) }
   }, [loadData])
-
-  if (isOperator) {
-    return <OperatorDashboardPage />
-  }
 
   if (loading) {
     return (
