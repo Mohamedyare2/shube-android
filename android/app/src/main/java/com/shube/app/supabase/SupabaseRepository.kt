@@ -52,7 +52,7 @@ object SupabaseRepository {
             val result = client.postgrest["customers"]
                 .select {
                     filter {
-                        eq("sender_phone", senderPhone)
+                        eq("telesom_number", senderPhone)
                         eq("active", true)
                     }
                     limit(1)

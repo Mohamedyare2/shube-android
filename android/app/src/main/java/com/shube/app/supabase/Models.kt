@@ -26,7 +26,7 @@ data class BundleRule(
 @Serializable
 data class Customer(
     val id: String,
-    @SerialName("sender_phone") val senderPhone: String,
+    @SerialName("telesom_number") val telesomNumber: String,
     @SerialName("somtel_number") val somtelNumber: String,
     val active: Boolean = true
 )
