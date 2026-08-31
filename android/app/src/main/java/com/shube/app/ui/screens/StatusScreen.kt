@@ -67,6 +67,27 @@ fun StatusScreen(
     }
     var showUnpairDialog by remember { mutableStateOf(false) }
 
+    // Request SMS permissions on launch
+    val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val smsGranted = permissions[android.Manifest.permission.RECEIVE_SMS] == true || 
+                         permissions[android.Manifest.permission.READ_SMS] == true
+        if (!smsGranted) {
+            android.widget.Toast.makeText(context, "SMS Permission is REQUIRED for Shube to work!", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        permissionLauncher.launch(
+            arrayOf(
+                android.Manifest.permission.RECEIVE_SMS,
+                android.Manifest.permission.READ_SMS,
+                android.Manifest.permission.CALL_PHONE
+            )
+        )
+    }
+
     // Read real hardware values and update display every 30 seconds
     fun refreshLocalStatus() {
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
@@ -304,6 +325,28 @@ fun StatusScreen(
                         )
                     }
                 }
+            }
+
+            // ── Test Button ────────────────────────────────────────────────
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { 
+                    val intent = android.content.Intent(context, com.shube.app.service.GatewayForegroundService::class.java).apply {
+                        action = com.shube.app.service.GatewayForegroundService.ACTION_PROCESS_SMS
+                        putExtra("sms_hash", "test-hash-${System.currentTimeMillis()}")
+                        putExtra("sender", "634284015") // Must match a customer's telesom_number in DB
+                        putExtra("amount", 1500.0) // Must match a bundle rule amount in DB
+                        putExtra("tx_id", "TEST_TX_123")
+                        putExtra("body", "Test SMS")
+                    }
+                    androidx.core.content.ContextCompat.startForegroundService(context, intent)
+                    android.widget.Toast.makeText(context, "Test SMS triggered!", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ShubeBlue)
+            ) {
+                Text("TEST: Simulate 1500 SLS SMS", color = Color.White, fontWeight = FontWeight.Bold)
             }
 
             // ── Unpair Button ────────────────────────────────────────────────
