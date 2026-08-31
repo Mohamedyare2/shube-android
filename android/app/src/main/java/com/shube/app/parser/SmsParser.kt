@@ -17,7 +17,7 @@ class SmsParser {
     
     // Example: "You have received 5,500 SLS from 0634284015. Ref: TXN123456"
     private val amountPattern = Pattern.compile("(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(SLS)", Pattern.CASE_INSENSITIVE)
-    private val senderPattern = Pattern.compile("from\\s+(06[3-7]\\d{7})", Pattern.CASE_INSENSITIVE)
+    private val senderPattern = Pattern.compile("from\\s+((?:06[3-7])?\\d{7})", Pattern.CASE_INSENSITIVE)
     private val txIdPattern = Pattern.compile("Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(messageBody: String, sender: String): ParsedSms? {
@@ -32,7 +32,8 @@ class SmsParser {
 
         val senderMatcher = senderPattern.matcher(messageBody)
         val extractedSender = if (senderMatcher.find()) {
-            senderMatcher.group(1)
+            val raw = senderMatcher.group(1) ?: ""
+            if (raw.length > 7) raw.takeLast(7) else raw
         } else {
             // Fallback to the actual SMS sender if not found in body
             sender

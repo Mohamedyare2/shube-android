@@ -72,6 +72,7 @@ class UssdStateMachine(private val context: Context) {
                         val codeToDial = template
                             .replace("{bundle_option}", bundleOption)
                             .replace("{somtel_number}", somtelNumber)
+                            .replace("{pin}", pinManager.getPin() ?: "")
                             
                         Log.d("UssdStateMachine", "Dialing: $codeToDial")
                         
@@ -103,7 +104,14 @@ class UssdStateMachine(private val context: Context) {
                     }
                     
                     "SEND_REPLY" -> {
-                        val reply = step.value ?: "1" // Default confirm
+                        val rawReply = step.value ?: "1" // Default confirm
+                        val reply = rawReply
+                            .replace("{somtel_number}", somtelNumber)
+                            .replace("{numberka}", somtelNumber)
+                            .replace("{number}", somtelNumber)
+                            .replace("{bundle_option}", bundleOption)
+                            .replace("{pin}", pinManager.getPin() ?: "00000")
+                        Log.d("UssdStateMachine", "Sending USSD reply: $reply (template: $rawReply)")
                         UssdAccessibilityService.nextReply = reply
                         currentDialogText = waitForDialog(step.timeoutMs)
                     }

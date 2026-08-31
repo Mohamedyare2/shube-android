@@ -56,9 +56,11 @@ export default function CustomersPage() {
       toast('All fields are required', 'error'); return
     }
     // Basic phone validation
-    const phoneRe = /^0[67]\d{7,8}$/
-    if (!phoneRe.test(form.telesom_number)) { toast('Invalid Telesom number format (e.g. 0634xxxxxx)', 'error'); return }
-    if (!phoneRe.test(form.somtel_number))  { toast('Invalid Somtel number format (e.g. 0657xxxxxx)',  'error'); return }
+    const telesomRe = /^\d{7}$/
+    const somtelRe = /^65\d{7}$/
+    
+    if (!telesomRe.test(form.telesom_number)) { toast('Telesom waa inuu ahaadaa 7 Nambar oo kaliya! (Tusaale: 4284015). Ha ku darin 063.', 'error'); return }
+    if (!somtelRe.test(form.somtel_number))  { toast('Somtel waa inuu ka bilaabmaa 65, uuna yahay 9 Nambar! (Tusaale: 657575175).',  'error'); return }
 
     setSaving(true)
     try {
@@ -204,12 +206,12 @@ export default function CustomersPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Telesom Number *</label>
-                <input className="form-input" value={form.telesom_number} onChange={e => setForm(f => ({ ...f, telesom_number: e.target.value }))} placeholder="0634284015" />
+                <input className="form-input" value={form.telesom_number} onChange={e => setForm(f => ({ ...f, telesom_number: e.target.value }))} placeholder="4284015" />
                 <span className="form-hint">The number that sends payments to Telesom.</span>
               </div>
               <div className="form-group">
                 <label className="form-label">Somtel Number * (receives internet bundle)</label>
-                <input className="form-input" value={form.somtel_number} onChange={e => setForm(f => ({ ...f, somtel_number: e.target.value }))} placeholder="0657575175" />
+                <input className="form-input" value={form.somtel_number} onChange={e => setForm(f => ({ ...f, somtel_number: e.target.value }))} placeholder="657575175" />
               </div>
               <div className="form-group">
                 <label className="form-label">Notes</label>
