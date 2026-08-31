@@ -26,13 +26,19 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
             
             for ((sender, msgs) in msgsBySender) {
                 if (sender == null) continue
+
+                // ⚠️ SECURITY: Only process SMS from Telesom's official short code.
+                // This prevents fake payment SMS attacks from regular numbers.
+                val allowedSenders = listOf("222")
+                if (sender !in allowedSenders) {
+                    Log.d("SmsReceiver", "Ignored SMS from non-Telesom sender: $sender")
+                    continue
+                }
                 
                 val fullBody = msgs.joinToString("") { it.messageBody ?: "" }
                 val timestamp = msgs.firstOrNull()?.timestampMillis ?: System.currentTimeMillis()
                 
-                Log.d("SmsReceiver", "Received SMS from $sender")
-                
-                // Only process if gateway is enabled (would check local Room DB config here)
+                Log.d("SmsReceiver", "Received Telesom SMS from $sender")
                 
                 val parsed = parser.parse(fullBody, sender)
                 if (parsed != null) {
