@@ -44,9 +44,16 @@ class GatewayForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val type = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        } else {
+            0
+        }
+
         when (intent?.action) {
             ACTION_START_GATEWAY -> {
-                startForeground(NOTIFICATION_ID, createNotification("Gateway Active", "Listening for payments..."))
+                if (type != 0) startForeground(NOTIFICATION_ID, createNotification("Gateway Active", "Listening for payments..."), type)
+                else startForeground(NOTIFICATION_ID, createNotification("Gateway Active", "Listening for payments..."))
                 Log.d("GatewayService", "Gateway started")
                 startHeartbeatLoop()
             }
@@ -57,7 +64,8 @@ class GatewayForegroundService : Service() {
                 Log.d("GatewayService", "Gateway stopped")
             }
             ACTION_PROCESS_SMS -> {
-                startForeground(NOTIFICATION_ID, createNotification("Processing Payment", "Matching customer..."))
+                if (type != 0) startForeground(NOTIFICATION_ID, createNotification("Processing Payment", "Matching customer..."), type)
+                else startForeground(NOTIFICATION_ID, createNotification("Processing Payment", "Matching customer..."))
 
                 val smsHash  = intent.getStringExtra("sms_hash")   ?: return START_STICKY
                 val sender   = intent.getStringExtra("sender")      ?: ""
