@@ -15,10 +15,11 @@ class SmsParser {
     // and cached locally in Room for offline use. 
     // Providing default fallback patterns based on the requirement.
     
-    // Example: "You have received 5,500 SLS from 0634284015. Ref: TXN123456"
-    private val amountPattern = Pattern.compile("(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*(SLS)", Pattern.CASE_INSENSITIVE)
-    private val senderPattern = Pattern.compile("from\\s+((?:06[3-7])?\\d{7})", Pattern.CASE_INSENSITIVE)
-    private val txIdPattern = Pattern.compile("Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
+    // Matches: "SLSH1,500" or "1,500 SLS" or "SLSH 1,500"
+    private val amountPattern = Pattern.compile("(?:SLSH\\s*|SLS\\s*)(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)|(?:(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*SLS)", Pattern.CASE_INSENSITIVE)
+    // Matches number in parentheses: (634284015) or after "from "
+    private val senderPattern = Pattern.compile("(?:\\((\\d{7,10})\\)|from\\s+(\\d{7,10}))", Pattern.CASE_INSENSITIVE)
+    private val txIdPattern = Pattern.compile("Tix[:\\s]*([A-Za-z0-9]+)|Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(messageBody: String, sender: String): ParsedSms? {
         val amountMatcher = amountPattern.matcher(messageBody)
@@ -26,14 +27,14 @@ class SmsParser {
             return null // Cannot determine amount, invalid payment SMS
         }
 
-        val amountStr = amountMatcher.group(1)?.replace(",", "") ?: return null
+        val amountStr = (amountMatcher.group(1) ?: amountMatcher.group(2))?.replace(",", "") ?: return null
         val amount = amountStr.toDoubleOrNull() ?: return null
         val currency = amountMatcher.group(2)?.uppercase() ?: "SLS"
 
         val senderMatcher = senderPattern.matcher(messageBody)
         val extractedSender = if (senderMatcher.find()) {
-            val raw = senderMatcher.group(1) ?: ""
-            if (raw.length > 7) raw.takeLast(7) else raw
+            // group(1) = parentheses match e.g. (634284015), group(2) = "from" match
+            senderMatcher.group(1) ?: senderMatcher.group(2)
         } else {
             // Fallback to the actual SMS sender if not found in body
             sender
@@ -41,7 +42,7 @@ class SmsParser {
 
         val txIdMatcher = txIdPattern.matcher(messageBody)
         val transactionId = if (txIdMatcher.find()) {
-            txIdMatcher.group(1)
+            txIdMatcher.group(1) ?: txIdMatcher.group(2)
         } else {
             null
         }

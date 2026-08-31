@@ -55,11 +55,11 @@ export default function CustomersPage() {
     if (!form.customer_name || !form.telesom_number || !form.somtel_number) {
       toast('All fields are required', 'error'); return
     }
-    // Basic phone validation
-    const telesomRe = /^\d{7}$/
+    // Basic phone validation — Telesom: 9 digits (e.g. 634284015), Somtel: 9 digits starting with 65
+    const telesomRe = /^\d{9}$/
     const somtelRe = /^65\d{7}$/
     
-    if (!telesomRe.test(form.telesom_number)) { toast('Telesom waa inuu ahaadaa 7 Nambar oo kaliya! (Tusaale: 4284015). Ha ku darin 063.', 'error'); return }
+    if (!telesomRe.test(form.telesom_number)) { toast('Telesom waa inuu ahaadaa 9 Nambar! (Tusaale: 634284015). Ha ku darin 0.', 'error'); return }
     if (!somtelRe.test(form.somtel_number))  { toast('Somtel waa inuu ka bilaabmaa 65, uuna yahay 9 Nambar! (Tusaale: 657575175).',  'error'); return }
 
     setSaving(true)
@@ -206,8 +206,8 @@ export default function CustomersPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Telesom Number *</label>
-                <input className="form-input" value={form.telesom_number} onChange={e => setForm(f => ({ ...f, telesom_number: e.target.value }))} placeholder="4284015" />
-                <span className="form-hint">The number that sends payments to Telesom.</span>
+                <input className="form-input" value={form.telesom_number} onChange={e => setForm(f => ({ ...f, telesom_number: e.target.value }))} placeholder="634284015" />
+                <span className="form-hint">9 nambar (Tusaale: 634284015) — Ha ku darin 0 hore.</span>
               </div>
               <div className="form-group">
                 <label className="form-label">Somtel Number * (receives internet bundle)</label>
