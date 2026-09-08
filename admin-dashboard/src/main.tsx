@@ -17,6 +17,7 @@ import UssdConfigPage from './pages/UssdConfigPage'
 import SmsParserPage from './pages/SmsParserPage'
 import ReportsPage from './pages/ReportsPage'
 import AuditLogsPage from './pages/AuditLogsPage'
+import DownloadPage from './pages/DownloadPage'
 import './index.css'
 
 // Placeholder for remaining pages
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="sms-parser" element={<SmsParserPage />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="audit-logs" element={<AuditLogsPage />} />
+              <Route path="download" element={<DownloadPage />} />
               <Route path="settings" element={<Placeholder title="Settings" />} />
             </Route>
           </Routes>

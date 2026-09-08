@@ -22,6 +22,7 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { section: 'Reporting',    path: '/reports',      icon: '📈', label: 'Reports' },
   { path: '/audit-logs',     icon: '📋', label: 'Audit Logs' },
   { path: '/settings',       icon: '🔧', label: 'Settings' },
+  { section: 'Downloads',    path: '/download',     icon: '📥', label: 'Downloads' },
 ]
 
 const OPERATOR_NAV_ITEMS: NavItem[] = [
@@ -34,6 +35,7 @@ const OPERATOR_NAV_ITEMS: NavItem[] = [
   { path: '/sms-parser',      icon: '📩', label: 'SMS Parser' },
   { section: 'Reporting',     path: '/reports',      icon: '📈', label: 'Reports' },
   { path: '/audit-logs',      icon: '📋', label: 'Audit Logs' },
+  { section: 'Downloads',     path: '/download',     icon: '📥', label: 'Downloads' },
 ]
 
 interface SidebarProps {

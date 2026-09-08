@@ -179,7 +179,11 @@ export default function DevicesPage() {
                             : (dev as any).battery_level < 50 ? 'var(--brand-warning)'
                             : 'var(--brand-success)'
                         }}>
-                          {(dev as any).battery_level}%
+                          {typeof (dev as any).battery_level === 'number' && (dev as any).battery_level > 0
+                            ? `${(dev as any).battery_level}%`
+                            : getDeviceStatus(dev) === 'online' && typeof (dev as any).battery_level === 'number'
+                              ? `${(dev as any).battery_level}%`
+                              : '—'}
                         </div>
                       </div>
                       <div style={{ background: 'var(--bg-surface-2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
@@ -238,7 +242,7 @@ export default function DevicesPage() {
                 /* ── Show Code ── */
                 <div style={{ textAlign: 'center', padding: 'var(--space-4) 0' }}>
                   <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-                    Open the <strong>SHUBE Worker App</strong> on your Android phone and enter this code:
+                    Ku fur <strong>SHUBE App</strong>-ka mobile-kaaga, gali <strong>Username & Password</strong>-kaaga website-ka, kadibna gali code-kan:
                   </div>
                   <div style={{
                     fontSize: '3.5rem', fontWeight: 900, letterSpacing: '0.4rem',
@@ -250,7 +254,7 @@ export default function DevicesPage() {
                     {pairingCode}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 'var(--space-4)' }}>
-                    ⚠️ This code can only be used once and expires when the device connects.
+                    ⚠️ Code-kan waxaa la isticmaali karaa hal mar kaliya waxaana loogu talagalay in lagu xiro mobile-kaaga.
                   </div>
                   <button className="btn btn-secondary" onClick={() => { setPairingCode(null); setDeviceName('My Worker Phone') }}>
                     Generate Another Code

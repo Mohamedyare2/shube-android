@@ -7,27 +7,56 @@ import {
 } from '../lib/utils'
 import { useAuth } from '../contexts/AuthContext'
 
-const STATUS_OPTIONS = [
-  'all', 'success', 'failed', 'pending', 'processing',
-  'customer_not_found', 'invalid_amount', 'duplicate', 'unknown_result',
-  'ussd_interaction_required', 'queued',
+// ── Tab definitions ──────────────────────────────────────────────────────────
+type TabKey = 'all' | 'pending' | 'success' | 'failed'
+
+const TABS: { key: TabKey; label: string; emoji: string; statuses: string[]; color: string }[] = [
+  {
+    key: 'all',
+    label: 'All',
+    emoji: '📋',
+    statuses: [],
+    color: 'var(--brand-primary)',
+  },
+  {
+    key: 'pending',
+    label: 'Pending',
+    emoji: '⏳',
+    statuses: ['pending', 'processing', 'ussd_started', 'authenticating', 'confirming', 'queued', 'ussd_interaction_required'],
+    color: '#F59E0B',
+  },
+  {
+    key: 'success',
+    label: 'Successful',
+    emoji: '✅',
+    statuses: ['success'],
+    color: 'var(--brand-success)',
+  },
+  {
+    key: 'failed',
+    label: 'Failed',
+    emoji: '❌',
+    statuses: ['failed', 'customer_not_found', 'invalid_amount', 'duplicate', 'unknown_result'],
+    color: 'var(--brand-danger)',
+  },
 ]
 
 const PAGE_SIZE = 25
 
 export default function TransactionsPage() {
   const { isOperator, user } = useAuth()
-  // Resolve operator row id once
   const [operatorRowId, setOperatorRowId] = useState<string | null>(null)
   useEffect(() => {
     if (!isOperator || !user?.id) return
     supabase.from('operators').select('id').eq('profile_id', user.id).single()
       .then(({ data }) => { if (data) setOperatorRowId(data.id) })
   }, [isOperator, user?.id])
+
+  const [activeTab, setActiveTab] = useState<TabKey>('all')
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [tabCounts, setTabCounts] = useState<Record<TabKey, number>>({ all: 0, pending: 0, success: 0, failed: 0 })
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
-  const [statusFilter, setStatusFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -36,18 +65,32 @@ export default function TransactionsPage() {
   const [events, setEvents] = useState<TransactionEvent[]>([])
   const [eventsLoading, setEventsLoading] = useState(false)
 
+  // Fetch tab counts (for badges)
+  const loadCounts = useCallback(async () => {
+    const counts: Record<TabKey, number> = { all: 0, pending: 0, success: 0, failed: 0 }
+    await Promise.all(
+      TABS.map(async tab => {
+        let q = supabase.from('transactions').select('id', { count: 'exact', head: true })
+        if (isOperator && operatorRowId) q = q.eq('operator_id', operatorRowId)
+        if (tab.statuses.length > 0) q = q.in('status', tab.statuses)
+        const { count } = await q
+        counts[tab.key] = count ?? 0
+      })
+    )
+    setTabCounts(counts)
+  }, [isOperator, operatorRowId])
+
   const load = useCallback(async () => {
     setLoading(true)
+    const tab = TABS.find(t => t.key === activeTab)!
     let q = supabase
       .from('transactions')
       .select(`*, bundle_rule:bundle_rules(bundle_name,data_amount,data_unit), operator:operators(username), device:devices(device_name)`, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
-    // Scope to operator's own transactions
     if (isOperator && operatorRowId) q = q.eq('operator_id', operatorRowId)
-
-    if (statusFilter !== 'all') q = q.eq('status', statusFilter)
+    if (tab.statuses.length > 0) q = q.in('status', tab.statuses)
     if (search) q = q.or(`telesom_number.ilike.%${search}%,somtel_number.ilike.%${search}%,telesom_transaction_id.ilike.%${search}%`)
     if (dateFrom) q = q.gte('created_at', dateFrom)
     if (dateTo) q = q.lte('created_at', dateTo + 'T23:59:59')
@@ -56,17 +99,21 @@ export default function TransactionsPage() {
     if (data) setTransactions(data as Transaction[])
     if (count !== null) setTotal(count)
     setLoading(false)
-  }, [page, statusFilter, search, dateFrom, dateTo, isOperator, operatorRowId])
+  }, [page, activeTab, search, dateFrom, dateTo, isOperator, operatorRowId])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadCounts() }, [loadCounts])
 
   // Realtime subscription
   useEffect(() => {
     const ch = supabase.channel('tx-page')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        load()
+        loadCounts()
+      })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [load])
+  }, [load, loadCounts])
 
   async function openDetail(tx: Transaction) {
     setSelected(tx)
@@ -81,14 +128,16 @@ export default function TransactionsPage() {
   }
 
   async function handleExport() {
+    const tab = TABS.find(t => t.key === activeTab)!
     let q = supabase
       .from('transactions')
       .select('id,telesom_number,amount_sls,currency,telesom_transaction_id,somtel_number,status,failure_reason,created_at,completed_at,test_mode')
       .order('created_at', { ascending: false })
       .limit(10000)
     if (isOperator && operatorRowId) q = q.eq('operator_id', operatorRowId)
+    if (tab.statuses.length > 0) q = q.in('status', tab.statuses)
     const { data } = await q
-    if (data) exportCsv(data, 'shube_transactions')
+    if (data) exportCsv(data, `shube_transactions_${activeTab}`)
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -101,17 +150,81 @@ export default function TransactionsPage() {
     return 'default'
   }
 
+  const currentTab = TABS.find(t => t.key === activeTab)!
+
   return (
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
         <div>
           <h1 className="page-title">{isOperator ? 'My Transactions' : 'All Transactions'}</h1>
-          <p className="page-subtitle">{total.toLocaleString()} total transactions</p>
+          <p className="page-subtitle">{tabCounts.all.toLocaleString()} total transactions</p>
         </div>
         <button className="btn btn-secondary" onClick={handleExport}>📥 Export CSV</button>
       </div>
 
-      {/* Filters */}
+      {/* ── Tabs ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.key
+          const count = tabCounts[tab.key]
+          return (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setPage(0) }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 18px',
+                borderRadius: 'var(--radius-lg)',
+                border: `1.5px solid ${isActive ? tab.color : 'var(--border-subtle)'}`,
+                background: isActive ? `${tab.color}18` : 'var(--bg-surface)',
+                color: isActive ? tab.color : 'var(--text-secondary)',
+                fontWeight: isActive ? 700 : 500,
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>{tab.emoji}</span>
+              <span>{tab.label}</span>
+              <span style={{
+                background: isActive ? tab.color : 'var(--bg-surface-2)',
+                color: isActive ? '#fff' : 'var(--text-muted)',
+                borderRadius: '99px',
+                padding: '1px 8px',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                minWidth: 24,
+                textAlign: 'center',
+              }}>
+                {count.toLocaleString()}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── Pending alert banner ──────────────────────────────────────────── */}
+      {tabCounts.pending > 0 && activeTab !== 'pending' && (
+        <div
+          onClick={() => { setActiveTab('pending'); setPage(0) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.35)',
+            borderRadius: 'var(--radius-lg)', padding: 'var(--space-3) var(--space-4)',
+            marginBottom: 'var(--space-4)', cursor: 'pointer', fontSize: '0.875rem',
+          }}
+        >
+          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+          <div>
+            <strong style={{ color: '#F59E0B' }}>{tabCounts.pending} transaction{tabCounts.pending > 1 ? 's' : ''} pending</strong>
+            <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>— Click to view pending transactions</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Filters ───────────────────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
         <div className="card-body" style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', padding: 'var(--space-4) var(--space-5)' }}>
           <div className="search-bar" style={{ maxWidth: 280 }}>
@@ -123,22 +236,27 @@ export default function TransactionsPage() {
               onChange={e => { setSearch(e.target.value); setPage(0) }}
             />
           </div>
-          <select className="filter-select" value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }}>
-            {STATUS_OPTIONS.map(s => (
-              <option key={s} value={s}>{s === 'all' ? 'All Statuses' : txStatusLabel(s as Transaction['status'])}</option>
-            ))}
-          </select>
           <input type="date" className="filter-select" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(0) }} title="From date" />
           <input type="date" className="filter-select" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(0) }} title="To date" />
-          {(search || statusFilter !== 'all' || dateFrom || dateTo) && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setStatusFilter('all'); setDateFrom(''); setDateTo(''); setPage(0) }}>✕ Clear</button>
+          {(search || dateFrom || dateTo) && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); setPage(0) }}>✕ Clear</button>
           )}
+          <div style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+            {total.toLocaleString()} {currentTab.label.toLowerCase()} transactions
+          </div>
         </div>
       </div>
 
-      {/* Table */}
+      {/* ── Table ─────────────────────────────────────────────────────────── */}
       <div className="card">
-        <div className="table-wrapper" style={{ borderRadius: 'var(--radius-xl)', border: 'none' }}>
+        {/* Tab indicator bar */}
+        <div style={{
+          height: 3,
+          background: currentTab.color,
+          borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
+          opacity: 0.6,
+        }} />
+        <div className="table-wrapper" style={{ borderRadius: 0, border: 'none' }}>
           <table>
             <thead>
               <tr>
@@ -165,9 +283,15 @@ export default function TransactionsPage() {
               ) : transactions.length === 0 ? (
                 <tr><td colSpan={9}>
                   <div className="empty-state">
-                    <div className="empty-icon">💳</div>
-                    <div className="empty-title">No transactions found</div>
-                    <div className="empty-desc">Try adjusting your filters</div>
+                    <div className="empty-icon">
+                      {activeTab === 'pending' ? '⏳' : activeTab === 'success' ? '✅' : activeTab === 'failed' ? '❌' : '💳'}
+                    </div>
+                    <div className="empty-title">
+                      {activeTab === 'pending' ? 'No pending transactions' : activeTab === 'success' ? 'No successful transactions' : activeTab === 'failed' ? 'No failed transactions' : 'No transactions found'}
+                    </div>
+                    <div className="empty-desc">
+                      {activeTab === 'pending' ? 'All transactions have been processed ✓' : 'Try adjusting your filters'}
+                    </div>
                   </div>
                 </td></tr>
               ) : transactions.map(tx => (
@@ -204,7 +328,7 @@ export default function TransactionsPage() {
         {/* Pagination */}
         <div className="pagination">
           <div className="pagination-info">
-            Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
+            Showing {Math.min(page * PAGE_SIZE + 1, total)}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
           </div>
           <div className="pagination-controls">
             <button className="pagination-btn" disabled={page === 0} onClick={() => setPage(0)}>«</button>
@@ -219,7 +343,7 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Transaction Detail Modal */}
+      {/* ── Transaction Detail Modal ──────────────────────────────────────── */}
       {selected && (
         <div className="modal-backdrop" onClick={() => setSelected(null)}>
           <div className="modal modal-lg" onClick={e => e.stopPropagation()}>

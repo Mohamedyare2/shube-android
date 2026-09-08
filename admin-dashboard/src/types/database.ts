@@ -63,6 +63,7 @@ export interface BundleRule {
   ussd_replies?: string[]
   active: boolean
   sort_order: number
+  cost_price: number | null   // Qiimaha asalka ah oo dollar ($) ah ee shirkadda
   created_at: string
   updated_at: string
 }

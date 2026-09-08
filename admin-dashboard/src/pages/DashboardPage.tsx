@@ -24,13 +24,23 @@ export default function DashboardPage() {
 
   const loadData = useCallback(async () => {
     if (isOperator && !operatorRowId) return; // Wait until operatorRowId is resolved
-    // Dashboard stats
+    
+    // Dashboard stats — starting from today 12:00 AM (midnight reset)
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+    const fromDate = startOfToday.toISOString()
+
     let statsData;
     if (isOperator && operatorRowId) {
-      const res = await supabase.rpc('get_operator_stats', { p_operator_id: operatorRowId })
+      const res = await supabase.rpc('get_operator_stats', { 
+        p_operator_id: operatorRowId,
+        p_from_date: fromDate
+      })
       statsData = res.data
     } else {
-      const res = await supabase.rpc('get_dashboard_stats')
+      const res = await supabase.rpc('get_dashboard_stats', {
+        p_from_date: fromDate
+      })
       statsData = res.data
     }
     if (statsData) setStats(statsData as unknown as DashboardStats)
@@ -142,27 +152,27 @@ export default function DashboardPage() {
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-primary)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(59,130,246,0.12)', fontSize: '1.25rem' }}>💳</div>
           <div className="stat-value">{formatNumber(stats?.total ?? 0)}</div>
-          <div className="stat-label">Total Transactions</div>
+          <div className="stat-label">Today's Transactions</div>
         </div>
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-success)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(34,197,94,0.12)', fontSize: '1.25rem' }}>✅</div>
           <div className="stat-value" style={{ color: 'hsl(142,76%,45%)' }}>{formatNumber(stats?.success ?? 0)}</div>
-          <div className="stat-label">Successful</div>
+          <div className="stat-label">Today's Success</div>
         </div>
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-danger)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(239,68,68,0.12)', fontSize: '1.25rem' }}>❌</div>
           <div className="stat-value" style={{ color: 'hsl(0,84%,60%)' }}>{formatNumber(stats?.failed ?? 0)}</div>
-          <div className="stat-label">Failed</div>
+          <div className="stat-label">Today's Failed</div>
         </div>
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-warning)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(234,179,8,0.12)', fontSize: '1.25rem' }}>⏳</div>
           <div className="stat-value" style={{ color: 'hsl(38,92%,55%)' }}>{formatNumber(stats?.pending ?? 0)}</div>
-          <div className="stat-label">Pending</div>
+          <div className="stat-label">Today's Pending</div>
         </div>
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-accent)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(20,184,166,0.12)', fontSize: '1.25rem' }}>💰</div>
           <div className="stat-value" style={{ fontSize: '1.4rem' }}>{formatSLS(stats?.total_sls_processed ?? 0)}</div>
-          <div className="stat-label">Total Processed</div>
+          <div className="stat-label">Today's Processed SLS</div>
         </div>
         <div className="stat-card" style={{ '--card-accent': 'var(--brand-purple)' } as React.CSSProperties}>
           <div className="stat-card-icon" style={{ background: 'rgba(139,92,246,0.12)', fontSize: '1.25rem' }}>📱</div>

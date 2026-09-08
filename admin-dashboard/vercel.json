@@ -1,11 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://your-api-domain.com/api/$1"
-    },
-    {
-      "source": "/(?!downloads/).*",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

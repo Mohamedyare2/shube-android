@@ -1,4 +1,4 @@
-import { SUPABASE_URL, sbFetch, jsonResponse } from '../_utils.js';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, sbFetch, jsonResponse } from '../_utils.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,7 +28,16 @@ export default async function handler(req, res) {
       body: JSON.stringify({ device_identifier: real_identifier, status: 'online', last_seen: new Date().toISOString() }),
     });
 
-    return jsonResponse(res, 200, { success: true, device_id: device.id, operator_id: device.operator_id });
+    // Return supabase_token so the Android app can authenticate with Supabase
+    // and pass RLS policies when inserting transactions
+    return jsonResponse(res, 200, {
+      success: true,
+      device_id: device.id,
+      operator_id: device.operator_id,
+      supabase_url: SUPABASE_URL,
+      supabase_anon_key: process.env.SUPABASE_ANON_KEY || '',
+      supabase_service_key: SUPABASE_SERVICE_ROLE_KEY,
+    });
   } catch (err) {
     return jsonResponse(res, 500, { error: err.message });
   }

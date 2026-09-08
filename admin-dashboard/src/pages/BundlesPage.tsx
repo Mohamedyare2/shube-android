@@ -5,6 +5,20 @@ import { formatSLS, formatDate, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
 
+// Exchange rate placeholder (SLS to USD)
+const EXCHANGE_RATE = 1 / 570 // 1 SLS ≈ $0.00175 (570 SLS = $1)
+
+function formatUSD(val: number | null | undefined) {
+  if (val == null || isNaN(Number(val))) return '—'
+  return `$${Number(val).toFixed(4)}`
+}
+
+function calcProfit(amountSls: number, costPrice: number | null) {
+  if (costPrice == null) return null
+  const revenue = amountSls * EXCHANGE_RATE
+  return revenue - costPrice
+}
+
 export default function BundlesPage() {
   const { toast } = useToast()
   const { isAdmin } = useAuth()
@@ -19,6 +33,7 @@ export default function BundlesPage() {
   const [form, setForm] = useState({
     amount_sls: '', bundle_name: '', data_amount: '', data_unit: 'GB' as 'GB' | 'MB',
     ussd_option: '', ussd_code: '', ussd_replies: [] as string[], active: true, sort_order: '0',
+    cost_price: '',
   })
   
   // USSD Builder helper states
@@ -26,6 +41,7 @@ export default function BundlesPage() {
   const [ussdPrefix, setUssdPrefix] = useState('*137')
   const [ussdPin, setUssdPin] = useState('00000')
   const [isManualTemplate, setIsManualTemplate] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -45,7 +61,7 @@ export default function BundlesPage() {
       setUssdPrefix('*137')
       setForm(f => ({
         ...f,
-        ussd_option: f.ussd_option || '05',
+        ussd_option: f.ussd_option || '5',
         ussd_code: '*137*{somtel_number}*{bundle_option}*00000#',
         ussd_replies: ['1'],
       }))
@@ -53,12 +69,11 @@ export default function BundlesPage() {
       setUssdPrefix('*134')
       setForm(f => ({
         ...f,
-        ussd_option: f.ussd_option || '05',
+        ussd_option: f.ussd_option || '5',
         ussd_code: '*134*{somtel_number}*{bundle_option}*00000#',
         ussd_replies: ['1'],
       }))
     } else if (method === '106_12') {
-      // $0.12 bundle (e.g. 50MB): *106# -> 2 -> 2 -> 1 -> 1 -> {somtel_number} -> 00000
       setUssdPrefix('*106#')
       setForm(f => ({
         ...f,
@@ -70,7 +85,6 @@ export default function BundlesPage() {
         ussd_replies: ['2', '2', '1', '1', '{somtel_number}', '00000'],
       }))
     } else if (method === '106_25') {
-      // $0.25 bundle (e.g. 120MB): *106# -> 2 -> 2 -> 1 -> 2 -> {somtel_number} -> 00000
       setUssdPrefix('*106#')
       setForm(f => ({
         ...f,
@@ -97,19 +111,19 @@ export default function BundlesPage() {
 
   function openCreate() {
     setEditing(null)
+    setShowAdvanced(false)
     applyPreset('137')
     setForm({
       amount_sls: '', bundle_name: '', data_amount: '', data_unit: 'GB',
-      ussd_option: '05', ussd_code: '*137*{somtel_number}*{bundle_option}*00000#',
-      ussd_replies: ['1'], active: true, sort_order: '0'
+      ussd_option: '5', ussd_code: '*137*{somtel_number}*{bundle_option}*00000#',
+      ussd_replies: ['1'], active: true, sort_order: '0', cost_price: '',
     })
     setShowModal(true)
   }
 
   function openEdit(b: BundleRule) {
     setEditing(b)
-    
-    // Detect method
+
     let method: '137' | '134' | '106_12' | '106_25' | 'custom' = 'custom'
     let manual = true
     let detectedPrefix = '*137'
@@ -132,10 +146,17 @@ export default function BundlesPage() {
       }
     }
 
+    // If the saved ussd_code contains any hardcoded number (not a template), force advanced mode open
+    // so the operator can see and fix the issue.
+    const hasHardcodedNumber = /\d{7,10}/.test(b.ussd_code)
+    const isTemplate = b.ussd_code.includes('{somtel_number}') || b.ussd_code.includes('{bundle_option}')
+    const needsAdvanced = manual || (hasHardcodedNumber && !isTemplate)
+
     setSelectedMethod(method)
     setUssdPrefix(detectedPrefix)
     setUssdPin(detectedPin)
     setIsManualTemplate(manual)
+    setShowAdvanced(needsAdvanced)
 
     setForm({
       amount_sls: String(b.amount_sls),
@@ -147,6 +168,7 @@ export default function BundlesPage() {
       ussd_replies: b.ussd_replies || [],
       active: b.active,
       sort_order: String(b.sort_order),
+      cost_price: b.cost_price != null ? String(b.cost_price) : '',
     })
     setShowModal(true)
   }
@@ -157,6 +179,11 @@ export default function BundlesPage() {
     }
     const amt = parseFloat(form.amount_sls)
     if (isNaN(amt) || amt <= 0) { toast('Invalid amount', 'error'); return }
+
+    const costPrice = form.cost_price !== '' ? parseFloat(form.cost_price) : null
+    if (form.cost_price !== '' && (isNaN(costPrice!) || costPrice! < 0)) {
+      toast('Invalid cost price', 'error'); return
+    }
 
     setSaving(true)
     try {
@@ -170,6 +197,7 @@ export default function BundlesPage() {
         ussd_replies: form.ussd_replies,
         active: form.active,
         sort_order: parseInt(form.sort_order) || 0,
+        cost_price: costPrice,
       }
       if (editing) {
         const { error } = await supabase.from('bundle_rules').update(payload).eq('id', editing.id)
@@ -207,17 +235,23 @@ export default function BundlesPage() {
     load()
   }
 
-  // Generate live preview string
+  // Live preview — use generic placeholder instead of a real/test number
   const previewCode = form.ussd_code
-    .replace('{somtel_number}', '657575175')
-    .replace('{bundle_option}', form.ussd_option || '05')
+    .replace('{somtel_number}', 'XXXXXXXXXX')
+    .replace('{bundle_option}', form.ussd_option || '5')
     .replace('{pin}', ussdPin || '00000')
 
   const previewReplies = form.ussd_replies.map(r =>
-    r.replace('{somtel_number}', '657575175')
-     .replace('{numberka}', '657575175')
+    r.replace('{somtel_number}', 'XXXXXXXXXX')
+     .replace('{numberka}', 'XXXXXXXXXX')
      .replace('{pin}', ussdPin || '00000')
   )
+
+  // Preview live profit in form
+  const formAmtSls = parseFloat(form.amount_sls) || 0
+  const formCost   = form.cost_price !== '' ? parseFloat(form.cost_price) : null
+  const formProfit = calcProfit(formAmtSls, formCost)
+  const formRevenue = formAmtSls * EXCHANGE_RATE
 
   return (
     <div className="page-container">
@@ -232,7 +266,32 @@ export default function BundlesPage() {
       {/* Info box */}
       <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 'var(--radius-lg)', padding: 'var(--space-4) var(--space-5)', marginBottom: 'var(--space-4)', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
         ℹ️ When a payment arrives, the system looks up the exact SLS amount to find the correct bundle and USSD code. Amounts must be exact — no rounding.
+        &nbsp;&nbsp;|&nbsp;&nbsp; 💰 <strong>Cost Price</strong> = what the company charges you per bundle (in USD). Setting it enables profit tracking.
       </div>
+
+      {/* Summary cards */}
+      {!loading && bundles.length > 0 && (() => {
+        const activeBundles = bundles.filter(b => b.active)
+        const bundlesWithCost = bundles.filter(b => b.cost_price != null)
+        const totalRevenue = bundlesWithCost.reduce((s, b) => s + b.amount_sls * EXCHANGE_RATE, 0)
+        const totalCost    = bundlesWithCost.reduce((s, b) => s + (b.cost_price ?? 0), 0)
+        const avgProfit    = bundlesWithCost.length ? (totalRevenue - totalCost) / bundlesWithCost.length : null
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+            {[
+              { label: 'Total Bundles', value: bundles.length, color: 'var(--brand-primary)' },
+              { label: 'Active', value: activeBundles.length, color: 'var(--brand-success)' },
+              { label: 'Priced Bundles', value: bundlesWithCost.length, color: 'var(--brand-accent)' },
+              { label: 'Avg Profit/Bundle', value: avgProfit != null ? `$${avgProfit.toFixed(4)}` : '—', color: avgProfit != null && avgProfit > 0 ? 'var(--brand-success)' : 'var(--brand-danger)' },
+            ].map(card => (
+              <div key={card.label} className="card" style={{ padding: 'var(--space-4)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: card.color }}>{card.value}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>{card.label}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       <div className="card">
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
@@ -245,6 +304,9 @@ export default function BundlesPage() {
                 <th>USSD Option</th>
                 <th>USSD Code</th>
                 <th>Replies</th>
+                <th>Cost ($)</th>
+                <th>Revenue ($)</th>
+                <th>Profit ($)</th>
                 <th>Status</th>
                 <th>Updated</th>
                 <th>Actions</th>
@@ -252,48 +314,69 @@ export default function BundlesPage() {
             </thead>
             <tbody>
               {loading ? (
-                Array(4).fill(0).map((_, i) => <tr key={i}>{Array(9).fill(0).map((_, j) => <td key={j}><div className="skeleton" style={{ height: 14, width: 60 }} /></td>)}</tr>)
+                Array(4).fill(0).map((_, i) => <tr key={i}>{Array(12).fill(0).map((_, j) => <td key={j}><div className="skeleton" style={{ height: 14, width: 60 }} /></td>)}</tr>)
               ) : bundles.length === 0 ? (
-                <tr><td colSpan={9}>
+                <tr><td colSpan={12}>
                   <div className="empty-state">
                     <div className="empty-icon">📦</div>
                     <div className="empty-title">No bundle rules configured</div>
                     <div className="empty-desc">Add at least one bundle rule to enable automatic recharge.</div>
                   </div>
                 </td></tr>
-              ) : bundles.map(b => (
-                <tr key={b.id}>
-                  <td style={{ fontWeight: 700, fontSize: '1rem' }}>{formatSLS(b.amount_sls)}</td>
-                  <td style={{ fontWeight: 600 }}>{b.bundle_name}</td>
-                  <td>
-                    <span style={{ fontWeight: 700, color: 'var(--brand-accent)', fontSize: '1rem' }}>
-                      {b.data_amount}{b.data_unit}
-                    </span>
-                  </td>
-                  <td className="table-mono">{b.ussd_option}</td>
-                  <td className="table-mono" style={{ color: 'var(--brand-primary)' }}>{b.ussd_code}</td>
-                  <td>
-                    {b.ussd_replies && b.ussd_replies.length > 0 ? (
-                      <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--brand-primary)', fontSize: '0.75rem' }}>
-                        {b.ussd_replies.join(' → ')}
+              ) : bundles.map(b => {
+                const revenue = b.amount_sls * EXCHANGE_RATE
+                const profit  = calcProfit(b.amount_sls, b.cost_price)
+                const profitColor = profit == null ? 'var(--text-muted)' : profit > 0 ? 'var(--brand-success)' : 'var(--brand-danger)'
+                return (
+                  <tr key={b.id}>
+                    <td style={{ fontWeight: 700, fontSize: '1rem' }}>{formatSLS(b.amount_sls)}</td>
+                    <td style={{ fontWeight: 600 }}>{b.bundle_name}</td>
+                    <td>
+                      <span style={{ fontWeight: 700, color: 'var(--brand-accent)', fontSize: '1rem' }}>
+                        {b.data_amount}{b.data_unit}
                       </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>
-                    )}
-                  </td>
-                  <td><span className={`badge ${profileStatusClass(b.active ? 'active' : 'disabled')}`}>{b.active ? 'ACTIVE' : 'DISABLED'}</span></td>
-                  <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(b.updated_at)}</td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
-                      <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
-                        {b.active ? 'Disable' : 'Enable'}
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="table-mono">{b.ussd_option}</td>
+                    <td className="table-mono" style={{ color: 'var(--brand-primary)' }}>{b.ussd_code}</td>
+                    <td>
+                      {b.ussd_replies && b.ussd_replies.length > 0 ? (
+                        <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--brand-primary)', fontSize: '0.75rem' }}>
+                          {b.ussd_replies.join(' → ')}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>
+                      )}
+                    </td>
+                    {/* Cost Price */}
+                    <td style={{ fontFamily: 'monospace', color: b.cost_price != null ? 'hsl(0,84%,65%)' : 'var(--text-muted)' }}>
+                      {formatUSD(b.cost_price)}
+                    </td>
+                    {/* Revenue */}
+                    <td style={{ fontFamily: 'monospace', color: 'var(--brand-primary)' }}>
+                      {`$${revenue.toFixed(4)}`}
+                    </td>
+                    {/* Profit */}
+                    <td style={{ fontFamily: 'monospace', fontWeight: 700, color: profitColor }}>
+                      {profit != null ? (
+                        <span title={`Revenue: $${revenue.toFixed(4)} - Cost: $${b.cost_price}`}>
+                          {profit >= 0 ? '+' : ''}{`$${profit.toFixed(4)}`}
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td><span className={`badge ${profileStatusClass(b.active ? 'active' : 'disabled')}`}>{b.active ? 'ACTIVE' : 'DISABLED'}</span></td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(b.updated_at)}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEdit(b)}>Edit</button>
+                        <button className={`btn btn-sm ${b.active ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleActive(b)}>
+                          {b.active ? 'Disable' : 'Enable'}
+                        </button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setDeleteConfirm(b)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -302,7 +385,7 @@ export default function BundlesPage() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 660 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
             <div className="modal-header">
               <div className="modal-title">{editing ? 'Edit Bundle Rule' : 'Add Bundle Rule'}</div>
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowModal(false)}>✕</button>
@@ -333,262 +416,224 @@ export default function BundlesPage() {
                 </div>
               </div>
 
-              {/* Section 2: USSD Setup with Easy Presets */}
+              {/* ── Cost & Profit Section ────────────────────────────── */}
+              <div style={{ margin: 'var(--space-3) 0', padding: 'var(--space-4)', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ fontWeight: 700, color: 'var(--brand-success)', marginBottom: 'var(--space-3)', fontSize: '0.875rem' }}>
+                  💰 Xisaabinta Faa'idada (Profit Calculation)
+                </div>
+                <div className="form-row">
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label">Cost Price (USD $) *</label>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      className="form-input table-mono"
+                      value={form.cost_price}
+                      onChange={e => setForm(f => ({ ...f, cost_price: e.target.value }))}
+                      placeholder="0.1200"
+                      style={{ borderColor: 'rgba(16,185,129,0.4)' }}
+                    />
+                    <span className="form-hint">Qiimaha shirkadda ku iibisatay bundle-kan (dollar)</span>
+                  </div>
+                  {/* Live profit preview */}
+                  {formAmtSls > 0 && (
+                    <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 4, paddingBottom: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Revenue ({formAmtSls} SLS × {EXCHANGE_RATE.toFixed(6)})</span>
+                        <span style={{ fontFamily: 'monospace', color: 'var(--brand-primary)' }}>${formRevenue.toFixed(4)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Cost Price</span>
+                        <span style={{ fontFamily: 'monospace', color: 'hsl(0,84%,65%)' }}>{formCost != null ? `$${formCost.toFixed(4)}` : '—'}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '6px 0', marginTop: 2 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Net Profit</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, color: formProfit != null ? (formProfit >= 0 ? 'var(--brand-success)' : 'var(--brand-danger)') : 'var(--text-muted)' }}>
+                          {formProfit != null ? `${formProfit >= 0 ? '+' : ''}$${formProfit.toFixed(4)}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: USSD Setup — Simplified */}
               <div style={{ margin: 'var(--space-4) 0 var(--space-2)', padding: 'var(--space-4)', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-3)' }}>
-                  <label className="form-label" style={{ marginBottom: 0, fontWeight: 700, color: 'var(--brand-accent)' }}>
-                    ⚡ Habka USSD-ga (USSD Method Preset)
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}
-                    onClick={() => {
-                      setIsManualTemplate(!isManualTemplate)
-                      setSelectedMethod('custom')
-                    }}
-                  >
-                    {isManualTemplate ? '⚡ Ku noqo Automatic' : '⚙️ Qor Template Gacanta (Manual)'}
-                  </button>
+                <div style={{ fontWeight: 700, color: 'var(--brand-accent)', marginBottom: 'var(--space-3)', fontSize: '0.875rem' }}>
+                  ⚡ Habeynta USSD (USSD Setup)
                 </div>
 
-                {/* Quick Presets */}
-                {!isManualTemplate && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${selectedMethod === '137' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ textAlign: 'left', padding: '8px 12px' }}
-                      onClick={() => applyPreset('137')}
+                {/* Simple: Method selector + Bundle Option only */}
+                <div className="form-row">
+                  <div className="form-group" style={{ flex: 2 }}>
+                    <label className="form-label">Habka Shubista (USSD Method) *</label>
+                    <select
+                      className="form-select"
+                      value={selectedMethod}
+                      onChange={e => {
+                        const v = e.target.value as '137' | '134' | '106_12' | '106_25' | 'custom'
+                        if (v !== 'custom') applyPreset(v)
+                        else { setSelectedMethod('custom'); setIsManualTemplate(true); setShowAdvanced(true) }
+                      }}
                     >
-                      <div style={{ fontWeight: 700 }}>⭐ *137 (Toos - 1 Reply)</div>
-                      <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>*137*Number*Option*PIN# ➜ 1</div>
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${selectedMethod === '134' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ textAlign: 'left', padding: '8px 12px' }}
-                      onClick={() => applyPreset('134')}
-                    >
-                      <div style={{ fontWeight: 700 }}>⭐ *134 (Toos - 1 Reply)</div>
-                      <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>*134*Number*Option*PIN# ➜ 1</div>
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${selectedMethod === '106_12' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ textAlign: 'left', padding: '8px 12px' }}
-                      onClick={() => applyPreset('106_12')}
-                    >
-                      <div style={{ fontWeight: 700 }}>🌟 *106# ($0.12 / 50MB)</div>
-                      <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>*106# ➜ [2, 2, 1, 1, Num, PIN]</div>
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${selectedMethod === '106_25' ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ textAlign: 'left', padding: '8px 12px' }}
-                      onClick={() => applyPreset('106_25')}
-                    >
-                      <div style={{ fontWeight: 700 }}>🌟 *106# ($0.25 / 120MB)</div>
-                      <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>*106# ➜ [2, 2, 1, 2, Num, PIN]</div>
-                    </button>
+                      <option value="137">⭐ Somtel *137 — Toos (1 reply)</option>
+                      <option value="134">⭐ Somtel *134 — Toos (1 reply)</option>
+                      <option value="106_12">🌟 *106# — 50MB ($0.12) Maalinle</option>
+                      <option value="106_25">🌟 *106# — 120MB ($0.25) Maalinle</option>
+                      <option value="custom">⚙️ Custom / Gacan ku qor (Advanced)</option>
+                    </select>
+                    <span className="form-hint">
+                      {selectedMethod === '137' && 'Waxay garaacaysaa: *137*{lambarka}*{lacagta}*{pin}# ➜ 1'}
+                      {selectedMethod === '134' && 'Waxay garaacaysaa: *134*{lambarka}*{lacagta}*{pin}# ➜ 1'}
+                      {selectedMethod === '106_12' && 'Waxay garaacaysaa: *106# ➜ 6 tallaabo (lambarka + PIN si toos ah)'}
+                      {selectedMethod === '106_25' && 'Waxay garaacaysaa: *106# ➜ 6 tallaabo (lambarka + PIN si toos ah)'}
+                      {selectedMethod === 'custom' && 'Advanced settings-ka hoose u fur si aad u habeysid.'}
+                    </span>
                   </div>
-                )}
-
-                {/* Info Note for 106# */}
-                {(selectedMethod === '106_12' || selectedMethod === '106_25') && (
-                  <div style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', marginBottom: 'var(--space-3)', fontSize: '0.8rem', color: '#93C5FD', lineHeight: 1.5 }}>
-                    💡 <strong>Habka *106#:</strong> Telefonku wuxuu garaacayaa <code>*106#</code>, kadibna 6-da tallaabo ee soo socota ayuu si toos ah u dirayaa (Reply 5 waa lambarka macmiilka, Reply 6 waa PIN-ka).
-                  </div>
-                )}
-
-                {/* Dynamic Easy Inputs */}
-                {!isManualTemplate ? (
-                  <div className="form-row">
+                  {/* Bundle option — only shown for non-106 presets or custom */}
+                  {selectedMethod !== '106_12' && selectedMethod !== '106_25' && (
                     <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Service Dial Code *</label>
-                      <input
-                        className="form-input table-mono"
-                        value={selectedMethod === '106_12' || selectedMethod === '106_25' ? '*106#' : ussdPrefix}
-                        onChange={e => handlePrefixOrPinChange(e.target.value, ussdPin)}
-                        placeholder="*137"
-                        disabled={selectedMethod === '106_12' || selectedMethod === '106_25'}
-                      />
-                      <span className="form-hint">Koodhka la garaacayo</span>
-                    </div>
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">Xirmo / Bundle Option *</label>
+                      <label className="form-label">Koodhka Xirmada (Bundle Option) *</label>
                       <input
                         className="form-input table-mono"
                         value={form.ussd_option}
                         onChange={e => setForm(f => ({ ...f, ussd_option: e.target.value }))}
-                        placeholder="05"
+                        placeholder="Lacagta (Tus: 5, 0.5)"
                       />
-                      <span className="form-hint">Tusaale: 05, 1, ama 2</span>
+                      <span className="form-hint">Waa lacagta/qiimaha (Tus: 5 ama 0.5)</span>
                     </div>
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">PIN *</label>
-                      <input
-                        className="form-input table-mono"
-                        value={ussdPin}
-                        onChange={e => handlePrefixOrPinChange(ussdPrefix, e.target.value)}
-                        placeholder="00000"
-                      />
-                      <span className="form-hint">Default: 00000</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="form-row">
-                    <div className="form-group" style={{ flex: 1 }}>
-                      <label className="form-label">USSD Option *</label>
-                      <input className="form-input table-mono" value={form.ussd_option} onChange={e => setForm(f => ({ ...f, ussd_option: e.target.value }))} placeholder="05" />
-                    </div>
-                    <div className="form-group" style={{ flex: 2 }}>
-                      <label className="form-label">USSD Code / Template *</label>
-                      <input className="form-input table-mono" value={form.ussd_code} onChange={e => setForm(f => ({ ...f, ussd_code: e.target.value }))} placeholder="*137*{somtel_number}*{bundle_option}*00000#" />
-                    </div>
+                  )}
+                </div>
+
+                {/* Info Note for 106# */}
+                {(selectedMethod === '106_12' || selectedMethod === '106_25') && (
+                  <div style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', marginTop: 'var(--space-2)', fontSize: '0.8rem', color: '#93C5FD', lineHeight: 1.5 }}>
+                    💡 <strong>Habka *106#:</strong> Telefonku wuxuu garaacayaa <code>*106#</code>, kadibna 6-da tallaabo ee soo socota ayuu si toos ah u dirayaa — Tallaabada 5-aad waa lambarka macmiilka, Tallaabada 6-aad waa PIN-ka. Wax gacanta ku gasho ma jiraan.
                   </div>
                 )}
 
-                {/* Live Preview Box */}
-                <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px dashed rgba(59,130,246,0.4)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    📱 Tusaale toos ah (Sida uu App-ku u shubi doono):
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div>
-                      <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>Garaac: </span>
-                      <code style={{ fontSize: '0.95rem', color: 'var(--brand-accent)', fontWeight: 700 }}>
-                        {previewCode}
-                      </code>
-                    </div>
-                    {previewReplies.length > 0 && (
-                      <div style={{ fontSize: '0.85rem', color: '#CBD5E1', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
-                        <span>Tallaabooyinka Replies: </span>
-                        {previewReplies.map((r, i) => (
-                          <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ background: 'rgba(59,130,246,0.25)', color: '#60A5FA', border: '1px solid rgba(59,130,246,0.4)', padding: '1px 7px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
-                              {i + 1}: {r}
-                            </span>
-                            {i < previewReplies.length - 1 && <span style={{ color: '#64748B' }}>➜</span>}
-                          </span>
-                        ))}
+                {/* Advanced Settings Toggle */}
+                <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 'var(--space-3)' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '0.8rem', color: showAdvanced ? 'var(--brand-accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    onClick={() => setShowAdvanced(s => !s)}
+                  >
+                    <span style={{ transition: 'transform 0.2s', display: 'inline-block', transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                    {showAdvanced ? 'Qari Settings-ka Qotada dheer' : '⚙️ Settings-ka Qotada dheer (Advanced)'}
+                  </button>
+
+                  {showAdvanced && (
+                    <div style={{ marginTop: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                      {/* Manual Template override */}
+                      <div className="form-row">
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label className="form-label">Service Dial Code</label>
+                          <input
+                            className="form-input table-mono"
+                            value={selectedMethod === '106_12' || selectedMethod === '106_25' ? '*106#' : ussdPrefix}
+                            onChange={e => handlePrefixOrPinChange(e.target.value, ussdPin)}
+                            placeholder="*137"
+                            disabled={selectedMethod === '106_12' || selectedMethod === '106_25'}
+                          />
+                          <span className="form-hint">Koodhka USSD-ga la garaacayo</span>
+                        </div>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label className="form-label">PIN</label>
+                          <input
+                            className="form-input table-mono"
+                            value={ussdPin}
+                            onChange={e => handlePrefixOrPinChange(ussdPrefix, e.target.value)}
+                            placeholder="00000"
+                          />
+                          <span className="form-hint">Default: 00000</span>
+                        </div>
+                        <div className="form-group" style={{ flex: 2 }}>
+                          <label className="form-label">USSD Code / Template</label>
+                          <input
+                            className="form-input table-mono"
+                            value={form.ussd_code}
+                            onChange={e => setForm(f => ({ ...f, ussd_code: e.target.value }))}
+                            placeholder="*137*{somtel_number}*{bundle_option}*00000#"
+                          />
+                          <span className="form-hint">Isticmaal <code>{'{somtel_number}'}</code> iyo <code>{'{bundle_option}'}</code> — ha galinin number dhabta ah</span>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {/* Section 3: Follow-up Replies */}
-              <div className="form-group" style={{ marginTop: 'var(--space-3)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
-                  <label className="form-label" style={{ marginBottom: 0 }}>
-                    Tallaabooyinka Xiga (Follow-up Replies)
-                  </label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                      onClick={() => setForm(f => ({ ...f, ussd_replies: ['1'] }))}
-                    >
-                      1 Reply (1)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                      onClick={() => setForm(f => ({ ...f, ussd_replies: ['2', '2', '1', '1', '{somtel_number}', '00000'] }))}
-                    >
-                      *106# ($0.12)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                      onClick={() => setForm(f => ({ ...f, ussd_replies: ['2', '2', '1', '2', '{somtel_number}', '00000'] }))}
-                    >
-                      *106# ($0.25)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '0.7rem', padding: '2px 6px' }}
-                      onClick={() => setForm(f => ({ ...f, ussd_replies: [] }))}
-                    >
-                      Tirtir (0)
-                    </button>
-                  </div>
-                </div>
+                      {/* Follow-up Replies */}
+                      <div className="form-group">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                          <label className="form-label" style={{ marginBottom: 0 }}>Tallaabooyinka Xiga (Follow-up Replies)</label>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-1)' }}>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => setForm(f => ({ ...f, ussd_replies: ['1'] }))}>1 Reply (1)</button>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => setForm(f => ({ ...f, ussd_replies: ['2', '2', '1', '1', '{somtel_number}', '00000'] }))}>*106# ($0.12)</button>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => setForm(f => ({ ...f, ussd_replies: ['2', '2', '1', '2', '{somtel_number}', '00000'] }))}>*106# ($0.25)</button>
+                            <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: '0.7rem', padding: '2px 6px' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [] }))}>Tirtir (0)</button>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', alignSelf: 'center' }}>+ Ku dar degdeg:</span>
+                          <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(59,130,246,0.15)', color: '#93C5FD' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '{somtel_number}'] }))}>📞 Lambarka ({'{somtel_number}'})</button>
+                          <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(59,130,246,0.15)', color: '#93C5FD' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '00000'] }))}>🔒 PIN (00000)</button>
+                          <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(255,255,255,0.06)' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '1'] }))}>+ 1</button>
+                          <button type="button" className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(255,255,255,0.06)' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '2'] }))}>+ 2</button>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                          {form.ussd_replies.map((reply, idx) => (
+                            <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', width: '60px', fontFamily: 'monospace' }}>Step {idx + 1}:</span>
+                              <input
+                                className="form-input table-mono"
+                                value={reply}
+                                onChange={e => {
+                                  const newReplies = [...form.ussd_replies]
+                                  newReplies[idx] = e.target.value
+                                  setForm(f => ({ ...f, ussd_replies: newReplies }))
+                                }}
+                                placeholder={`Reply ${idx + 1}`}
+                                style={{ flex: 1 }}
+                              />
+                              <button type="button" className="btn btn-secondary btn-icon" onClick={() => {
+                                const newReplies = form.ussd_replies.filter((_, i) => i !== idx)
+                                setForm(f => ({ ...f, ussd_replies: newReplies }))
+                              }}>✕</button>
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--space-2)', alignSelf: 'flex-start' }} onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '1'] }))}>
+                          + Ku dar Tallaabo (Step)
+                        </button>
 
-                {/* Quick Insert helpers */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', alignSelf: 'center' }}>+ Ku dar degdeg:</span>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(59,130,246,0.15)', color: '#93C5FD' }}
-                    onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '{somtel_number}'] }))}
-                  >
-                    📞 Lambarka ({'{somtel_number}'})
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(59,130,246,0.15)', color: '#93C5FD' }}
-                    onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '00000'] }))}
-                  >
-                    🔒 PIN (00000)
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(255,255,255,0.06)' }}
-                    onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '1'] }))}
-                  >
-                    + 1
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.75rem', padding: '2px 8px', background: 'rgba(255,255,255,0.06)' }}
-                    onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '2'] }))}
-                  >
-                    + 2
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                  {form.ussd_replies.map((reply, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', width: '60px', fontFamily: 'monospace' }}>
-                        Step {idx + 1}:
-                      </span>
-                      <input
-                        className="form-input table-mono"
-                        value={reply}
-                        onChange={e => {
-                          const newReplies = [...form.ussd_replies]
-                          newReplies[idx] = e.target.value
-                          setForm(f => ({ ...f, ussd_replies: newReplies }))
-                        }}
-                        placeholder={`Reply ${idx + 1}`}
-                        style={{ flex: 1 }}
-                      />
-                      <button type="button" className="btn btn-secondary btn-icon" onClick={() => {
-                        const newReplies = form.ussd_replies.filter((_, i) => i !== idx)
-                        setForm(f => ({ ...f, ussd_replies: newReplies }))
-                      }}>✕</button>
+                        {/* Preview box — only in advanced mode, with safe generic placeholder */}
+                        <div style={{ background: 'rgba(0,0,0,0.35)', border: '1px dashed rgba(59,130,246,0.4)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            📱 Preview (Lambarka macmiilka waxaa u taagan XXXXXXXXXX):
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div>
+                              <span style={{ fontSize: '0.8rem', color: '#94A3B8' }}>Garaac: </span>
+                              <code style={{ fontSize: '0.95rem', color: 'var(--brand-accent)', fontWeight: 700 }}>{previewCode}</code>
+                            </div>
+                            {previewReplies.length > 0 && (
+                              <div style={{ fontSize: '0.85rem', color: '#CBD5E1', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                                <span>Tallaabooyinka: </span>
+                                {previewReplies.map((r, i) => (
+                                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ background: 'rgba(59,130,246,0.25)', color: '#60A5FA', border: '1px solid rgba(59,130,246,0.4)', padding: '1px 7px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 700 }}>
+                                      {i + 1}: {r}
+                                    </span>
+                                    {i < previewReplies.length - 1 && <span style={{ color: '#64748B' }}>➜</span>}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginTop: 'var(--space-2)', alignSelf: 'flex-start' }}
-                  onClick={() => setForm(f => ({ ...f, ussd_replies: [...f.ussd_replies, '1'] }))}
-                >
-                  + Ku dar Tallaabo (Step)
-                </button>
               </div>
 
               {/* Section 4: Active Toggle */}
