@@ -168,32 +168,35 @@ export default function DevicesPage() {
                     </span>
                   </div>
 
-                  {/* Battery + Network — only shown if we have the new columns */}
-                  {typeof (dev as any).battery_level === 'number' && (
+                  {/* Battery + Network — always shown if columns exist */}
+                  {((dev as any).battery_level !== null && (dev as any).battery_level !== undefined) || (dev as any).network_type ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
                       <div style={{ background: 'var(--bg-surface-2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>BATTERY</div>
                         <div style={{
                           fontSize: '1.2rem', fontWeight: 700,
-                          color: (dev as any).battery_level < 20 ? 'var(--brand-danger)'
+                          color: (dev as any).battery_level <= 0 || (dev as any).battery_level == null ? 'var(--text-muted)'
+                            : (dev as any).battery_level < 20 ? 'var(--brand-danger)'
                             : (dev as any).battery_level < 50 ? 'var(--brand-warning)'
                             : 'var(--brand-success)'
                         }}>
-                          {typeof (dev as any).battery_level === 'number' && (dev as any).battery_level > 0
+                          {(dev as any).battery_level != null && (dev as any).battery_level > 0
                             ? `${(dev as any).battery_level}%`
-                            : getDeviceStatus(dev) === 'online' && typeof (dev as any).battery_level === 'number'
-                              ? `${(dev as any).battery_level}%`
-                              : '—'}
+                            : '—'}
+                          {(dev as any).is_charging && (dev as any).battery_level > 0 ? ' ⚡' : ''}
                         </div>
                       </div>
                       <div style={{ background: 'var(--bg-surface-2)', borderRadius: 'var(--radius-md)', padding: '10px 14px' }}>
                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 4 }}>NETWORK</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--brand-primary)' }}>
-                          {(dev as any).network_type || '—'}
+                        <div style={{
+                          fontSize: '1.2rem', fontWeight: 700,
+                          color: (dev as any).network_type && (dev as any).network_type !== 'UNKNOWN' ? 'var(--brand-primary)' : 'var(--text-muted)'
+                        }}>
+                          {(dev as any).network_type && (dev as any).network_type !== 'UNKNOWN' ? (dev as any).network_type : '—'}
                         </div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--space-2)' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>

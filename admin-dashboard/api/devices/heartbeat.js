@@ -12,7 +12,8 @@ export default async function handler(req, res) {
   if (!device_id) return jsonResponse(res, 400, { error: "device_id required" });
 
   try {
-    const updateBody = { last_seen: new Date().toISOString(), status: 'online' };
+    const now = new Date().toISOString();
+    const updateBody = { last_seen: now, last_ping_at: now, status: 'online' };
     if (app_version) updateBody.app_version = app_version;
     if (android_version) updateBody.android_version = android_version;
     if (gateway_enabled !== undefined) updateBody.gateway_enabled = gateway_enabled;
