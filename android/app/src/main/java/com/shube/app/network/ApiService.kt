@@ -16,6 +16,7 @@ data class PairResult(
     val success: Boolean,
     val deviceId: String? = null,
     val operatorId: String? = null,
+    val supabaseServiceKey: String? = null,
     val error: String? = null
 )
 
@@ -33,10 +34,10 @@ class ApiService(private val context: Context) {
     private val prefs = DevicePreferences.getInstance(context)
 
     /**
-     * Calls POST /api/devices/pair with the 6-digit pairing code.
+     * Calls POST /api/devices/pair with username, password and 6-digit pairing code.
      * On success, the device_id and operator_id are returned.
      */
-    suspend fun pairDevice(pairingCode: String, serverUrl: String): PairResult =
+    suspend fun pairDevice(username: String, password: String, pairingCode: String, serverUrl: String): PairResult =
         withContext(Dispatchers.IO) {
             try {
                 val url = URL("$serverUrl/api/devices/pair")
@@ -44,10 +45,14 @@ class ApiService(private val context: Context) {
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
-                conn.connectTimeout = 10_000
-                conn.readTimeout = 10_000
+                conn.connectTimeout = 12_000
+                conn.readTimeout = 12_000
 
-                val body = JSONObject().put("pairing_code", pairingCode).toString()
+                val body = JSONObject()
+                    .put("username", username.trim())
+                    .put("password", password)
+                    .put("pairing_code", pairingCode.trim())
+                    .toString()
                 conn.outputStream.bufferedWriter().use { it.write(body) }
 
                 val code = conn.responseCode
@@ -64,7 +69,8 @@ class ApiService(private val context: Context) {
                     PairResult(
                         success = json.optBoolean("success", false),
                         deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
-                        operatorId = json.optString("operator_id").takeIf { it.isNotEmpty() }
+                        operatorId = json.optString("operator_id").takeIf { it.isNotEmpty() },
+                        supabaseServiceKey = json.optString("supabase_service_key").takeIf { it.isNotEmpty() }
                     )
                 } else {
                     val json = JSONObject(response)
@@ -117,30 +123,32 @@ class ApiService(private val context: Context) {
         }
 
     private fun getBatteryLevel(): Int {
-        // Method 1: IntentFilter sticky broadcast (most reliable on most devices)
+        // Method 1: BatteryManager.BATTERY_PROPERTY_CAPACITY (direct hardware query)
         try {
-            val ifilter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
-            val intent = context.registerReceiver(null, ifilter)
-            if (intent != null) {
-                val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
-                val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
-                if (level > 0 && scale > 0) {
-                    val pct = (level * 100f / scale).toInt()
-                    Log.d("ApiService", "Battery (method1): $pct%  level=$level scale=$scale")
-                    return pct
+            val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
+            if (bm != null) {
+                val cap = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                if (cap in 1..100) {
+                    Log.d("ApiService", "Battery (capacity property): $cap%")
+                    return cap
                 }
             }
         } catch (e: Exception) {
             Log.w("ApiService", "Battery method1 failed: ${e.message}")
         }
 
-        // Method 2: BatteryManager.BATTERY_PROPERTY_CAPACITY
+        // Method 2: IntentFilter sticky broadcast
         try {
-            val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as android.os.BatteryManager
-            val cap = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            if (cap > 0) {
-                Log.d("ApiService", "Battery (method2): $cap%")
-                return cap
+            val ifilter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+            val intent = context.registerReceiver(null, ifilter)
+            if (intent != null) {
+                val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+                if (level >= 0 && scale > 0) {
+                    val pct = (level * 100f / scale).toInt()
+                    Log.d("ApiService", "Battery (sticky intent): $pct% level=$level scale=$scale")
+                    return pct
+                }
             }
         } catch (e: Exception) {
             Log.w("ApiService", "Battery method2 failed: ${e.message}")

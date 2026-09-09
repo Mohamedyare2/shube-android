@@ -67,14 +67,19 @@ class GatewayForegroundService : Service() {
                 if (type != 0) startForeground(NOTIFICATION_ID, createNotification("Processing Payment", "Matching customer..."), type)
                 else startForeground(NOTIFICATION_ID, createNotification("Processing Payment", "Matching customer..."))
 
+                if (heartbeatJob == null || heartbeatJob?.isActive != true) {
+                    startHeartbeatLoop()
+                }
+
                 val smsHash  = intent.getStringExtra("sms_hash")   ?: return START_STICKY
                 val sender   = intent.getStringExtra("sender")      ?: ""
                 val amount   = intent.getDoubleExtra("amount", 0.0)
                 val txId     = intent.getStringExtra("tx_id")       ?: ""
                 val body     = intent.getStringExtra("body")        ?: ""
+                val testMode = intent.getBooleanExtra("test_mode", false)
 
                 scope.launch {
-                    processTransactionAsync(smsHash, sender, amount, txId, body)
+                    processTransactionAsync(smsHash, sender, amount, txId, body, testMode)
                 }
             }
         }
@@ -104,7 +109,8 @@ class GatewayForegroundService : Service() {
         sender: String,
         amount: Double,
         externalTxId: String,
-        smsBody: String
+        smsBody: String,
+        testMode: Boolean = false
     ) {
         val prefs = DevicePreferences.getInstance(this)
         val deviceId   = prefs.deviceId ?: run {
@@ -118,54 +124,45 @@ class GatewayForegroundService : Service() {
 
         Log.d("GatewayService", "Processing: amount=$amount SLS, sender=$sender")
 
-        // ── Step 1: Find bundle rule matching the amount ─────────
+        // ── Acquire WakeLock so CPU never sleeps during USSD/transaction ──────
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Shube::TransactionProcessing")
+        wakeLock?.acquire(180_000L) // 3 mins safety timeout
+
+        try {
+            // ── Step 1: Check if sender is a registered customer ─────
+        notify("Looking Up Customer", "Checking if $sender is registered...")
+        val customer = SupabaseRepository.getCustomerBySender(sender)
+        val somtelNumber = customer?.somtelNumber
+        if (somtelNumber == null) {
+            Log.w("GatewayService", "Unregistered sender $sender. Ignoring SMS.")
+            return // Completely ignore, no transaction created
+        }
+
+        // ── Step 2: Find bundle rule matching the amount ─────────
         notify("Matching Bundle", "Looking up $amount SLS bundle rule...")
         val bundle = SupabaseRepository.getBundleByAmount(amount)
         if (bundle == null) {
-            Log.w("GatewayService", "No bundle rule found for $amount SLS — logging and skipping")
-            // No matching bundle — we still log but do NOT do USSD
-            SupabaseRepository.createTransaction(
-                TransactionInsert(
-                    operatorId   = operatorId,
-                    deviceId     = deviceId,
-                    customerId   = null,
-                    senderNumber = sender,
-                    somtelNumber = null,
-                    amountSls    = amount,
-                    bundleName   = null,
-                    ussdCode     = null,
-                    smsHash      = hash,
-                    status       = "FAILED",
-                    notes        = "No bundle rule found for $amount SLS"
-                )
-            )
-            notify("Payment Skipped", "No bundle rule for $amount SLS")
+            Log.w("GatewayService", "Amount $amount SLS does not match any bundle rule. Assuming it's a normal transfer. Ignoring.")
+            // Completely ignore, no transaction created for non-bundle payments
             return
         }
         Log.d("GatewayService", "Bundle matched: ${bundle.bundleName}")
 
-        // ── Step 2: Look up customer's Somtel number ─────────────
-        notify("Looking Up Customer", "Finding Somtel # for $sender...")
-        val customer = SupabaseRepository.getCustomerBySender(sender)
-        val somtelNumber = customer?.somtelNumber
-        if (somtelNumber == null) {
-            Log.w("GatewayService", "No customer found for sender $sender")
-        }
-
-        // ── Step 3: Create transaction row (status = PROCESSING) ─
+        // ── Step 3: Create transaction row (status = processing) ─
         notify("Starting USSD", "Dialing ${bundle.ussdCode.take(8)}...")
         val transactionId = SupabaseRepository.createTransaction(
             TransactionInsert(
                 operatorId   = operatorId,
                 deviceId     = deviceId,
-                customerId   = customer?.id,
-                senderNumber = sender,
+                telesomNumber = sender,          // FIXED: was senderNumber
                 somtelNumber = somtelNumber,
                 amountSls    = amount,
-                bundleName   = bundle.bundleName,
-                ussdCode     = bundle.ussdCode,
+                bundleRuleId = bundle.id,        // FIXED: was bundleName (wrong column, now UUID FK)
                 smsHash      = hash,
-                status       = "PROCESSING"
+                smsBody      = smsBody,
+                testMode     = testMode,         // ADDED: track test transactions
+                status       = "processing"      // FIXED: lowercase to match DB CHECK constraint
             )
         )
 
@@ -188,14 +185,15 @@ class GatewayForegroundService : Service() {
         Log.d("GatewayService", "USSD result: $result for transaction $transactionId")
 
         // ── Step 6: Update transaction status ─────────────────────
+        // Status MUST be lowercase to match the DB CHECK constraint
         val (status, notes) = when (result) {
-            UssdResult.SUCCESS            -> Pair("SUCCESS",  "USSD workflow completed successfully")
-            UssdResult.FAILED             -> Pair("FAILED",   "USSD reported failure")
-            UssdResult.UNKNOWN            -> Pair("UNKNOWN",  "USSD completed but result is unclear")
-            UssdResult.INTERACTION_REQUIRED -> Pair("FAILED", "Accessibility service not active — could not automate USSD")
+            UssdResult.SUCCESS              -> Pair("success",      "USSD workflow completed successfully")
+            UssdResult.FAILED               -> Pair("failed",       "USSD reported failure")
+            UssdResult.UNKNOWN              -> Pair("unknown_result", "USSD completed but result is unclear")
+            UssdResult.INTERACTION_REQUIRED -> Pair("ussd_interaction_required", "Accessibility service not active")
         }
 
-        SupabaseRepository.updateTransactionStatus(transactionId, status, notes)
+        SupabaseRepository.updateTransactionStatus(transactionId, status, notes, completedAt = java.time.Instant.now().toString())
 
         // Update notification with final status
         val icon = when (result) {
@@ -207,6 +205,11 @@ class GatewayForegroundService : Service() {
         // Return to standby after 5 seconds
         kotlinx.coroutines.delay(5_000)
         notify("Gateway Active", "Listening for payments...")
+        } finally {
+            if (wakeLock?.isHeld == true) {
+                try { wakeLock.release() } catch (_: Exception) {}
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -53,11 +53,14 @@ fun LoginScreen(
     val scope   = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    var serverUrl   by remember { mutableStateOf(prefs.serverUrl) }
-    var pairingCode by remember { mutableStateOf("") }
-    var isLoading   by remember { mutableStateOf(false) }
-    var error       by remember { mutableStateOf<String?>(null) }
-    var showUrlEdit by remember { mutableStateOf(false) }
+    var serverUrl    by remember { mutableStateOf(prefs.serverUrl) }
+    var username     by remember { mutableStateOf("") }
+    var password     by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var pairingCode  by remember { mutableStateOf("") }
+    var isLoading    by remember { mutableStateOf(false) }
+    var error        by remember { mutableStateOf<String?>(null) }
+    var showUrlEdit  by remember { mutableStateOf(false) }
 
     // Animated gradient background
     val infiniteTransition = rememberInfiniteTransition(label = "bg")
@@ -105,78 +108,91 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 28.dp, vertical = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Logo
+            // ── Logo & Title ─────────────────────────────────────────
             Box(
                 modifier = Modifier
-                    .size(84.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(
                         brush = Brush.linearGradient(
                             colors = listOf(ShubeBlue, ShubePurple),
-                            start = Offset(0f, 0f), end = Offset(300f, 300f)
+                            start = Offset(0f, 0f), end = Offset(100f, 100f)
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text("S", fontSize = 42.sp, fontWeight = FontWeight.Black, color = Color.White)
+                Text("📡", fontSize = 34.sp)
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Text("SHUBE", fontSize = 34.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 3.sp)
-            Text("Operator Portal", fontSize = 14.sp, color = Color(0xFF94A3B8), letterSpacing = 1.sp, modifier = Modifier.padding(top = 4.dp))
+            Text(
+                "SHUBE GATEWAY",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                letterSpacing = 2.sp
+            )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Text(
+                "Pair your device with the Admin Portal",
+                fontSize = 13.sp,
+                color = Color(0xFF94A3B8),
+                modifier = Modifier.padding(top = 4.dp)
+            )
 
-            // Main Card
-            Surface(
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // ── Card ─────────────────────────────────────────────────
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                color = ShubeCard,
-                border = androidx.compose.foundation.BorderStroke(1.dp, ShubeBorder)
-            ) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text("Connect This Device", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(
-                        "Enter the 6-digit code from your Admin Dashboard to link this phone.",
-                        fontSize = 13.sp, color = Color(0xFF94A3B8),
-                        modifier = Modifier.padding(top = 6.dp, bottom = 22.dp),
-                        lineHeight = 18.sp
+                colors = CardDefaults.cardColors(containerColor = ShubeCard),
+                shape = RoundedCornerShape(20.dp),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(ShubeBorder, ShubeBorder.copy(alpha = 0.3f))
                     )
+                )
+            ) {
+                Column(modifier = Modifier.padding(22.dp)) {
 
-                    // ── Server URL ──────────────────────────────────────────
+                    // Server URL toggle row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Server URL", fontSize = 12.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.Medium)
-                        TextButton(
+                        Text(
+                            "SERVER CONFIG",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF64748B),
+                            letterSpacing = 1.sp
+                        )
+                        IconButton(
                             onClick = { showUrlEdit = !showUrlEdit },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Icon(Icons.Rounded.Edit, contentDescription = null, tint = ShubeBlue, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (showUrlEdit) "Done" else "Edit", fontSize = 12.sp, color = ShubeBlue)
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     AnimatedVisibility(visible = showUrlEdit) {
                         OutlinedTextField(
                             value = serverUrl,
-                            onValueChange = { serverUrl = it; error = null },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            label = { Text("Admin API URL") },
-                            placeholder = { Text("http://192.168.1.x:5050") },
+                            onValueChange = { serverUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Server URL") },
+                            placeholder = { Text("https://admin.shube.so") },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { keyboardController?.hide(); showUrlEdit = false }),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = ShubeBlue, unfocusedBorderColor = ShubeBorder,
                                 focusedLabelColor = ShubeBlue, unfocusedLabelColor = Color(0xFF94A3B8),
@@ -186,22 +202,53 @@ fun LoginScreen(
                         )
                     }
 
-                    AnimatedVisibility(visible = !showUrlEdit) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF0F172A))
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Rounded.Wifi, contentDescription = null, tint = ShubeBlue, modifier = Modifier.size(16.dp))
-                            Text(serverUrl.take(40), fontSize = 12.sp, color = Color(0xFF64748B))
-                        }
-                    }
-
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    // ── Username / Email ─────────────────────────────────────
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it; error = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Username or Email") },
+                        placeholder = { Text("operator or name@example.com") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                        leadingIcon = { Text("👤", fontSize = 16.sp) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ShubeBlue, unfocusedBorderColor = ShubeBorder,
+                            focusedLabelColor = ShubeBlue, unfocusedLabelColor = Color(0xFF94A3B8),
+                            cursorColor = ShubeBlue, focusedTextColor = Color.White, unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ── Password ─────────────────────────────────────────────
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it; error = null },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Password") },
+                        placeholder = { Text("Website password") },
+                        singleLine = true,
+                        visualTransformation = if (showPassword) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                        leadingIcon = { Text("🔒", fontSize = 16.sp) },
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Text(if (showPassword) "👁️" else "🙈", fontSize = 14.sp)
+                            }
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ShubeBlue, unfocusedBorderColor = ShubeBorder,
+                            focusedLabelColor = ShubeBlue, unfocusedLabelColor = Color(0xFF94A3B8),
+                            cursorColor = ShubeBlue, focusedTextColor = Color.White, unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // ── Pairing Code ────────────────────────────────────────
                     OutlinedTextField(
@@ -212,9 +259,10 @@ fun LoginScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Pairing Code") },
-                        placeholder = { Text("6-digit code") },
+                        label = { Text("Pairing Code (6-digit)") },
+                        placeholder = { Text("Code-ka Website-ka") },
                         singleLine = true,
+                        leadingIcon = { Text("🔢", fontSize = 16.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { keyboardController?.hide() }),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -235,7 +283,9 @@ fun LoginScreen(
                     // ── Connect Button ──────────────────────────────────────
                     Button(
                         onClick = {
-                            if (pairingCode.length != 6) { error = "Enter a valid 6-digit code"; return@Button }
+                            if (username.isBlank()) { error = "Fadlan gali Username ama Email-ka"; return@Button }
+                            if (password.isBlank()) { error = "Fadlan gali Password-ka"; return@Button }
+                            if (pairingCode.length != 6) { error = "Fadlan gali 6-da lambar ee Pairing Code-ka"; return@Button }
                             if (serverUrl.isBlank()) { error = "Server URL is required"; return@Button }
                             keyboardController?.hide()
                             isLoading = true
@@ -244,16 +294,21 @@ fun LoginScreen(
                             scope.launch {
                                 val cleanUrl = serverUrl.trimEnd('/')
                                 prefs.serverUrl = cleanUrl
-                                val result = api.pairDevice(pairingCode, cleanUrl)
+                                val result = api.pairDevice(username, password, pairingCode, cleanUrl)
 
                                 if (result.success && result.deviceId != null) {
                                     prefs.deviceId   = result.deviceId
                                     prefs.operatorId = result.operatorId
+                                    // Save service key and init Supabase service client
+                                    result.supabaseServiceKey?.let { key ->
+                                        prefs.supabaseServiceKey = key
+                                        com.shube.app.supabase.SupabaseService.initServiceClient(key)
+                                    }
                                     // Start heartbeat worker
                                     com.shube.app.worker.HeartbeatWorker.schedule(context)
                                     onLoginSuccess(result.deviceId)
                                 } else {
-                                    error = result.error ?: "Pairing failed. Check the code and try again."
+                                    error = result.error ?: "Isku-xirku ma guuleysan. Hubi xogtaada oo mar kale isku day."
                                 }
                                 isLoading = false
                             }
@@ -264,12 +319,12 @@ fun LoginScreen(
                             containerColor = ShubeBlue,
                             disabledContainerColor = ShubeBlue.copy(alpha = 0.5f)
                         ),
-                        enabled = !isLoading && pairingCode.length == 6
+                        enabled = !isLoading && username.isNotBlank() && password.isNotBlank() && pairingCode.length == 6
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.5.dp)
                         } else {
-                            Text("🔗  Connect Device", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("🔗  Connect & Pair Device", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
                         }
                     }
                 }
@@ -278,8 +333,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                "📱  Open your Admin Dashboard → Devices\nto generate a pairing code.",
-                color = Color(0xFF64748B), fontSize = 12.sp,
+                "📱  1. Ku gal Username & Password-ka Website-ka\n2. Tag Dashboard → Devices oo riix 'Generate Code'\n3. Gali 6-da lambar si aad u xirto mobile-ka.",
+                color = Color(0xFF94A3B8), fontSize = 12.sp,
                 textAlign = TextAlign.Center, lineHeight = 18.sp
             )
 

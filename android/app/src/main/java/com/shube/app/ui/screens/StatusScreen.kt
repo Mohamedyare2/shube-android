@@ -1,11 +1,15 @@
 package com.shube.app.ui.screens
 
-import android.os.BatteryManager
+import android.app.Activity
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.BatteryManager
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -17,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -66,6 +72,7 @@ fun StatusScreen(
         )
     }
     var showUnpairDialog by remember { mutableStateOf(false) }
+
 
     // Request SMS permissions on launch
     val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -171,25 +178,32 @@ fun StatusScreen(
                     Text("SHUBE", fontSize = 22.sp, fontWeight = FontWeight.Black, color = Color.White, letterSpacing = 2.sp)
                     Text("Operator Dashboard", fontSize = 12.sp, color = Color(0xFF94A3B8))
                 }
-                // Online / Offline badge
+                // Header badges & actions
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background((if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = 0.15f))
-                        .border(1.dp, (if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = 0.4f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.size(7.dp).clip(CircleShape)
-                            .background((if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = dotAlpha))
-                    )
-                    Text(
-                        if (status.isOnline) "Online" else "Offline",
-                        fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                        color = if (status.isOnline) ShubeGreen else Color(0xFFEF4444)
-                    )
+
+                    // Online / Offline badge
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background((if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = 0.15f))
+                            .border(1.dp, (if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.size(7.dp).clip(CircleShape)
+                                .background((if (status.isOnline) ShubeGreen else Color(0xFFEF4444)).copy(alpha = dotAlpha))
+                        )
+                        Text(
+                            if (status.isOnline) "Online" else "Offline",
+                            fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                            color = if (status.isOnline) ShubeGreen else Color(0xFFEF4444)
+                        )
+                    }
                 }
             }
 
@@ -327,28 +341,6 @@ fun StatusScreen(
                 }
             }
 
-            // ── Test Button ────────────────────────────────────────────────
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { 
-                    val intent = android.content.Intent(context, com.shube.app.service.GatewayForegroundService::class.java).apply {
-                        action = com.shube.app.service.GatewayForegroundService.ACTION_PROCESS_SMS
-                        putExtra("sms_hash", "test-hash-${System.currentTimeMillis()}")
-                        putExtra("sender", "634284015") // Must match a customer's telesom_number in DB
-                        putExtra("amount", 1500.0) // Must match a bundle rule amount in DB
-                        putExtra("tx_id", "TEST_TX_123")
-                        putExtra("body", "Test SMS")
-                    }
-                    androidx.core.content.ContextCompat.startForegroundService(context, intent)
-                    android.widget.Toast.makeText(context, "Test SMS triggered!", android.widget.Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ShubeBlue)
-            ) {
-                Text("TEST: Simulate 1500 SLS SMS", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-
             // ── Unpair Button ────────────────────────────────────────────────
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedButton(
@@ -362,6 +354,8 @@ fun StatusScreen(
                 Text("Unpair This Device", color = Color(0xFF94A3B8), fontSize = 14.sp)
             }
         }
+
+
     }
 
     // ── Unpair Confirmation Dialog ───────────────────────────────────────────

@@ -8,6 +8,10 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
  * Fallback USSD automation service for devices that do not fully support 
@@ -25,6 +29,10 @@ class UssdAccessibilityService : AccessibilityService() {
         
         // Command channel to tell this service what to reply (if applicable)
         var nextReply: String? = null
+        
+        // Lock to prevent multiple accessibility events for the same dialog from triggering duplicate actions
+        @Volatile
+        var isProcessingDialog = false
         
         var isServiceActive = false
             private set
@@ -50,24 +58,62 @@ class UssdAccessibilityService : AccessibilityService() {
         
         // Common USSD dialog class names (varies heavily by OEM)
         if (className.contains("Dialog") || className.contains("AlertDialog")) {
+            if (isProcessingDialog) return // Ignore redundant events for the same dialog while we process it
+
             val rootNode = rootInActiveWindow ?: return
             
             val dialogText = extractTextFromNode(rootNode)
+            
+            // Ignore system loading dialogs (e.g., "USSD code running...", "MMI code started")
+            // If we process these, the state machine will advance prematurely and skip replies!
+            val lowerText = dialogText.lowercase()
+            if (lowerText.contains("running") || lowerText.contains("mmi") || lowerText.contains("wait")) {
+                Log.d("UssdAccessibility", "Ignoring system loading dialog: $dialogText")
+                return
+            }
+
             if (dialogText.isNotBlank()) {
                 Log.d("UssdAccessibility", "Intercepted USSD Dialog: $dialogText")
-                _ussdDialogFlow.tryEmit(dialogText)
                 
                 // If the state machine gave us a reply to enter:
                 if (nextReply != null) {
                     val reply = nextReply!!
                     nextReply = null
+                    isProcessingDialog = true
                     
-                    // Attempt to find EditText and enter text, then click Send/OK
-                    val success = fillAndSubmitDialog(rootNode, reply)
-                    Log.d("UssdAccessibility", "Submit reply success: $success")
+                    CoroutineScope(Dispatchers.Main).launch {
+                        Log.d("UssdAccessibility", "Waiting 2 seconds for UI to settle...")
+                        delay(2000)
+                        
+                        val freshNode = rootInActiveWindow
+                        if (freshNode != null) {
+                            // Attempt to find EditText and enter text, then click Send/OK
+                            val success = fillAndSubmitDialog(freshNode, reply)
+                            Log.d("UssdAccessibility", "Submit reply success: $success")
+                        } else {
+                            Log.e("UssdAccessibility", "Could not get fresh window node after delay")
+                        }
+                        
+                        // Emit to state machine AFTER we finish so it doesn't advance prematurely
+                        _ussdDialogFlow.tryEmit(dialogText)
+                        
+                        // Small delay before releasing lock to prevent immediate re-trigger by closing animation
+                        delay(500)
+                        isProcessingDialog = false
+                    }
                 } else {
+                    isProcessingDialog = true
+                    
                     // Just reading a final response, attempt to click OK/Dismiss
                     clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE"))
+                    
+                    // Emit immediately since there is no reply
+                    _ussdDialogFlow.tryEmit(dialogText)
+                    
+                    CoroutineScope(Dispatchers.Main).launch {
+                        delay(500)
+                        isProcessingDialog = false
+                    }
                 }
             }
         }
@@ -85,7 +131,7 @@ class UssdAccessibilityService : AccessibilityService() {
         return sb.toString()
     }
     
-    private fun fillAndSubmitDialog(node: AccessibilityNodeInfo, text: String): Boolean {
+    private suspend fun fillAndSubmitDialog(node: AccessibilityNodeInfo, text: String): Boolean {
         // Find EditText
         val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input") // Common ID
         val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(node)
@@ -95,6 +141,9 @@ class UssdAccessibilityService : AccessibilityService() {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
             targetEdit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            
+            // Wait slightly after writing the text before clicking send
+            delay(500)
             
             // Find Send/OK button
             return clickButton(node, listOf("SEND", "OK", "REPLY"))

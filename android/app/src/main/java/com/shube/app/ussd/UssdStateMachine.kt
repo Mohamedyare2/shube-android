@@ -120,13 +120,25 @@ class UssdStateMachine(private val context: Context) {
                         // The previous step's reply resulted in this dialog text
                         Log.d("UssdStateMachine", "Final response text: $currentDialogText")
                         
-                        val isSuccess = step.successPatterns?.any { 
+                        val defaultSuccessPatterns = listOf(
+                            "ku guuleystay", "lagu shubay", "guul", "guuleystay", "u shubtay",
+                            "successful", "success", "confirmed", "done", "ok", "haragaagu waa", "haraagaaga cusub"
+                        )
+                        val defaultFailurePatterns = listOf(
+                            "haraagaagu kuguma filna", "ma haysatid", "khalad", "ma shaqaynayo",
+                            "failed", "error", "insufficient", "invalid", "not found", "lama heli karo"
+                        )
+
+                        val allSuccess = (step.successPatterns ?: emptyList()) + defaultSuccessPatterns
+                        val allFailure = (step.failurePatterns ?: emptyList()) + defaultFailurePatterns
+
+                        val isSuccess = allSuccess.any { 
                             currentDialogText.contains(it, ignoreCase = true) 
-                        } == true
+                        }
                         
-                        val isFailure = step.failurePatterns?.any { 
+                        val isFailure = allFailure.any { 
                             currentDialogText.contains(it, ignoreCase = true) 
-                        } == true
+                        }
                         
                         return when {
                             isSuccess -> UssdResult.SUCCESS
@@ -156,29 +168,20 @@ class UssdStateMachine(private val context: Context) {
                 return false
             }
             
-            // For API 26+
-            val callback = object : TelephonyManager.UssdResponseCallback() {
-                override fun onReceiveUssdResponse(
-                    telephonyManager: TelephonyManager?,
-                    request: String?,
-                    response: CharSequence?
-                ) {
-                    Log.d("UssdStateMachine", "onReceiveUssdResponse: $response")
-                }
-
-                override fun onReceiveUssdResponseFailed(
-                    telephonyManager: TelephonyManager?,
-                    request: String?,
-                    failureCode: Int
-                ) {
-                    Log.e("UssdStateMachine", "onReceiveUssdResponseFailed code: $failureCode")
-                }
+            // Encode the USSD code (especially the '#' at the end which must become '%23')
+            // Otherwise Android treats it as a URI fragment and drops it, causing 'Invalid MMI Code'
+            val encodedCode = android.net.Uri.encode(code)
+            
+            val intent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
+                data = android.net.Uri.parse("tel:$encodedCode")
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
             }
             
-            telephonyManager.sendUssdRequest(code, callback, handler)
+            context.startActivity(intent)
+            Log.d("UssdStateMachine", "Dialed USSD via ACTION_CALL: $code")
             true
         } catch (e: Exception) {
-            Log.e("UssdStateMachine", "Exception in sendUssdRequest", e)
+            Log.e("UssdStateMachine", "Exception in dialUssd", e)
             false
         }
     }

@@ -29,8 +29,8 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
 
                 // ⚠️ SECURITY: Only process SMS from Telesom's official short codes/names.
                 // This prevents fake payment SMS attacks from regular numbers.
-                val allowedSenders = listOf("222", "telesom", "zaad")
-                if (sender.lowercase() !in allowedSenders) {
+                val s = sender.lowercase()
+                if (!s.contains("222") && !s.contains("telesom") && !s.contains("zaad")) {
                     Log.d("SmsReceiver", "Ignored SMS from non-Telesom sender: $sender")
                     continue
                 }

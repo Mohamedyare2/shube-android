@@ -33,27 +33,32 @@ data class Customer(
 
 /**
  * Payload to INSERT into the `transactions` table.
+ * Column names MUST match 001_schema.sql exactly — extra fields cause Supabase to reject the INSERT.
  */
 @Serializable
 data class TransactionInsert(
-    @SerialName("operator_id") val operatorId: String,
-    @SerialName("device_id") val deviceId: String,
-    @SerialName("customer_id") val customerId: String?,
-    @SerialName("sender_number") val senderNumber: String,
-    @SerialName("somtel_number") val somtelNumber: String?,
-    @SerialName("amount_sls") val amountSls: Double,
-    @SerialName("bundle_name") val bundleName: String?,
-    @SerialName("ussd_code") val ussdCode: String?,
-    @SerialName("sms_hash") val smsHash: String,
-    val status: String = "PROCESSING",
-    val notes: String? = null
+    @SerialName("operator_id")    val operatorId: String,
+    @SerialName("device_id")      val deviceId: String,
+    @SerialName("telesom_number") val telesomNumber: String,
+    @SerialName("somtel_number")  val somtelNumber: String?,
+    @SerialName("amount_sls")     val amountSls: Double,
+    @SerialName("sms_hash")       val smsHash: String,
+    @SerialName("bundle_rule_id") val bundleRuleId: String?,
+    @SerialName("sms_body")       val smsBody: String? = null,
+    @SerialName("test_mode")      val testMode: Boolean = false,
+    val status: String = "processing"
+    // NOTE: customer_id and notes are NOT columns in the transactions table — do NOT add them
 )
 
 /**
  * Payload to UPDATE the `transactions` row after USSD execution.
+ * Only includes columns that actually exist in the DB schema.
+ * status MUST be lowercase to match the DB CHECK constraint.
  */
 @Serializable
 data class TransactionUpdate(
     val status: String,
-    val notes: String? = null
+    @SerialName("failure_reason") val failureReason: String? = null,
+    @SerialName("completed_at")   val completedAt: String? = null
+    // NOTE: "notes" is NOT a column in transactions table
 )

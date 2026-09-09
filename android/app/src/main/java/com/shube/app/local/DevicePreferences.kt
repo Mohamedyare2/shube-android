@@ -28,6 +28,10 @@ class DevicePreferences(context: Context) {
         get() = prefs.getString(KEY_DEVICE_NAME, "My Worker Phone") ?: "My Worker Phone"
         set(value) = prefs.edit().putString(KEY_DEVICE_NAME, value).apply()
 
+    var supabaseServiceKey: String?
+        get() = prefs.getString(KEY_SUPABASE_SERVICE_KEY, null)
+        set(value) = prefs.edit().putString(KEY_SUPABASE_SERVICE_KEY, value).apply()
+
     val isPaired: Boolean
         get() = deviceId != null
 
@@ -35,17 +39,19 @@ class DevicePreferences(context: Context) {
         prefs.edit()
             .remove(KEY_DEVICE_ID)
             .remove(KEY_OPERATOR_ID)
+            .remove(KEY_SUPABASE_SERVICE_KEY)
             .apply()
     }
 
     companion object {
-        private const val KEY_DEVICE_ID   = "device_id"
-        private const val KEY_OPERATOR_ID = "operator_id"
-        private const val KEY_SERVER_URL  = "server_url"
-        private const val KEY_DEVICE_NAME = "device_name"
+        private const val KEY_DEVICE_ID          = "device_id"
+        private const val KEY_OPERATOR_ID         = "operator_id"
+        private const val KEY_SERVER_URL          = "server_url"
+        private const val KEY_DEVICE_NAME         = "device_name"
+        private const val KEY_SUPABASE_SERVICE_KEY = "supabase_service_key"
 
         // Points to the live Vercel deployment — no local PC needed!
-        const val DEFAULT_SERVER_URL = "https://shube-android.vercel.app"
+        const val DEFAULT_SERVER_URL = "https://admin-dashboard-three-mauve-21.vercel.app"
 
         @Volatile private var instance: DevicePreferences? = null
 

@@ -12,7 +12,9 @@ import kotlinx.coroutines.withContext
  */
 object SupabaseRepository {
 
-    private val client get() = SupabaseService.client
+    // Use service-role client for all DB writes — bypasses RLS which requires authenticated user.
+    // The service key is injected at pair time via SupabaseService.initServiceClient().
+    private val client get() = SupabaseService.serviceClient
 
     // ─────────────────────────────────────────────────────────────
     // BUNDLE RULES
@@ -89,16 +91,22 @@ object SupabaseRepository {
 
     /**
      * Updates a transaction's status and optional notes after USSD execution.
-     * status should be one of: "SUCCESS", "FAILED", "UNKNOWN"
+     * status MUST be lowercase to pass the DB CHECK constraint:
+     *   "success", "failed", "unknown_result", "ussd_interaction_required", etc.
      */
     suspend fun updateTransactionStatus(
         transactionId: String,
         status: String,
-        notes: String? = null
+        notes: String? = null,
+        completedAt: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             client.postgrest["transactions"]
-                .update(TransactionUpdate(status = status, notes = notes)) {
+                .update(TransactionUpdate(
+                    status = status,
+                    failureReason = if (status in listOf("failed", "ussd_interaction_required", "unknown_result", "invalid_amount")) notes else null,
+                    completedAt = completedAt
+                )) {
                     filter { eq("id", transactionId) }
                 }
             true
