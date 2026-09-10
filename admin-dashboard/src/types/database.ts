@@ -115,8 +115,10 @@ export interface Device {
   gateway_enabled: boolean
   status: DeviceStatus
   last_seen: string | null
+  last_ping_at: string | null
   battery_level?: number | null
   is_charging?: boolean | null
+  network_type?: string | null
   revoked: boolean
   revoked_at: string | null
   revoked_by: string | null
