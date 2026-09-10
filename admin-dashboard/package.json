@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "concurrently \"vite --port 5173 --strictPort\" \"cd ../admin-api && venv/Scripts/python.exe app.py\"",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
