@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     if (app_version) updateBody.app_version = app_version;
     if (android_version) updateBody.android_version = android_version;
     if (gateway_enabled !== undefined) updateBody.gateway_enabled = gateway_enabled;
-    if (battery_level !== undefined) updateBody.battery_level = battery_level;
+    // Only save battery_level if it's a valid reading (1-100). -1 = sentinel (failed to read), 0 = invalid
+    if (battery_level !== undefined && battery_level !== null && battery_level > 0 && battery_level <= 100) updateBody.battery_level = battery_level;
     if (is_charging !== undefined) updateBody.is_charging = is_charging;
     if (network_type !== undefined) updateBody.network_type = network_type;
 
