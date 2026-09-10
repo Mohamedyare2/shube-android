@@ -399,16 +399,20 @@ app.post("/api/devices/heartbeat", async (req, res) => {
   if (!device_id) return res.status(400).json({ error: "device_id required" });
 
   try {
-    // Only include battery_level in the update if it's a valid reading (> 0)
+    // Only include battery_level if it's a valid reading (1-100). 0 and -1 are error sentinels.
     const patch = {
-      is_charging: is_charging || false,
-      network_type: network_type || 'UNKNOWN',
       is_online: true,
       status: 'online',
       last_ping_at: new Date().toISOString(),
       last_seen: new Date().toISOString(),
     };
-    if (typeof battery_level === 'number' && battery_level >= 0) {
+    if (is_charging !== undefined) patch.is_charging = is_charging || false;
+    // Only save network_type if it's a real network value (not UNKNOWN/Offline/null)
+    if (network_type && !['UNKNOWN', 'Unknown', 'Offline', 'OFFLINE'].includes(network_type)) {
+      patch.network_type = network_type;
+    }
+    // Only save battery_level if it's a valid reading between 1-100
+    if (typeof battery_level === 'number' && battery_level > 0 && battery_level <= 100) {
       patch.battery_level = Math.round(battery_level);
     }
 
