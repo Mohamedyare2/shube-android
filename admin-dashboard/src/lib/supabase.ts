@@ -8,17 +8,9 @@ import type { Database } from '../types/database'
 //
 // DO NOT put the service_role key here — only use the anon key.
 // ============================================================
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://YOUR_PROJECT.supabase.co'
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_ANON_KEY'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://eabwhgujwywwiormujrr.supabase.co'
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhYndoZ3Vqd3l3d2lvcm11anJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NzE4OTAsImV4cCI6MjEwMjU0Nzg5MH0.Evq9rRYECPnwe2rU-a7FJ8-Ygwk1YKzcEDeWXkyzjMg'
 
-if (SUPABASE_URL.includes('YOUR_PROJECT') || SUPABASE_ANON_KEY.includes('YOUR_ANON_KEY')) {
-  console.warn(
-    '[SHUBE] Supabase credentials not configured.\n' +
-    'Create an admin-dashboard/.env file with:\n' +
-    '  VITE_SUPABASE_URL=https://yourproject.supabase.co\n' +
-    '  VITE_SUPABASE_ANON_KEY=your_anon_key'
-  )
-}
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
