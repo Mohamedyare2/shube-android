@@ -20,7 +20,9 @@ export default async function handler(req, res) {
     // Only save battery_level if it's a valid reading (1-100). -1 = sentinel (failed to read), 0 = invalid
     if (battery_level !== undefined && battery_level !== null && battery_level > 0 && battery_level <= 100) updateBody.battery_level = battery_level;
     if (is_charging !== undefined) updateBody.is_charging = is_charging;
-    if (network_type !== undefined) updateBody.network_type = network_type;
+    // Only save network_type if it's a real value — reject Unknown/Offline/UNKNOWN
+    const invalidNetworks = ['Unknown', 'UNKNOWN', 'Offline', 'OFFLINE', 'unknown', 'offline'];
+    if (network_type && !invalidNetworks.includes(network_type)) updateBody.network_type = network_type;
 
     await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}`, {
       method: "PATCH",
