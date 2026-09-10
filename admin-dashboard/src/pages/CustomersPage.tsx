@@ -62,25 +62,28 @@ export default function CustomersPage() {
     if (!telesomRe.test(form.telesom_number)) { toast('Telesom waa inuu ahaadaa 9 Nambar! (Tusaale: 634284015). Ha ku darin 0.', 'error'); return }
     if (!somtelRe.test(form.somtel_number))  { toast('Somtel waa inuu ka bilaabmaa 65, uuna yahay 9 Nambar! (Tusaale: 657575175).',  'error'); return }
 
+    // Automatically use telesom number as the customer name since UI field is removed
+    const finalCustomerName = form.telesom_number
+
     setSaving(true)
     try {
       if (editing) {
         const { error } = await supabase.from('customers').update({
-          customer_name: form.customer_name,
+          customer_name: finalCustomerName,
           telesom_number: form.telesom_number,
           somtel_number:  form.somtel_number,
-          notes:          form.notes || null,
+          notes:          null,
           active:         form.active,
         }).eq('id', editing.id)
         if (error) throw error
-        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_updated', resource_type: 'customer', resource_id: editing.id, description: `Updated ${form.customer_name} (${form.telesom_number})` })
+        await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_updated', resource_type: 'customer', resource_id: editing.id, description: `Updated customer (${form.telesom_number})` })
         toast('Customer updated', 'success')
       } else {
         const { error } = await supabase.from('customers').insert({
-          customer_name: form.customer_name,
+          customer_name: finalCustomerName,
           telesom_number: form.telesom_number,
           somtel_number:  form.somtel_number,
-          notes:          form.notes || null,
+          notes:          null,
           active:         form.active,
           created_by:     user?.id,
         })
@@ -111,7 +114,7 @@ export default function CustomersPage() {
   async function handleDelete(c: Customer) {
     const { error } = await supabase.from('customers').delete().eq('id', c.id)
     if (error) { toast(error.message, 'error'); return }
-    await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_deleted', resource_type: 'customer', resource_id: c.id, description: `Deleted ${c.customer_name} (${c.telesom_number})` })
+    await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_deleted', resource_type: 'customer', resource_id: c.id, description: `Deleted customer (${c.telesom_number})` })
     toast('Customer deleted', 'success')
     setDeleteConfirm(null)
     load()
@@ -140,7 +143,6 @@ export default function CustomersPage() {
           <table>
             <thead>
               <tr>
-                <th>Customer Name</th>
                 <th>Telesom Number</th>
                 <th>→ Somtel Number</th>
                 <th>Status</th>
@@ -161,7 +163,6 @@ export default function CustomersPage() {
                 </td></tr>
               ) : customers.map(c => (
                 <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.customer_name}</td>
                   <td className="table-mono">{c.telesom_number}</td>
                   <td className="table-mono" style={{ color: 'var(--brand-accent)', fontWeight: 600 }}>{c.somtel_number}</td>
                   <td><span className={`badge ${profileStatusClass(c.active ? 'active' : 'disabled')}`}>{c.active ? 'ACTIVE' : 'DISABLED'}</span></td>
@@ -201,10 +202,6 @@ export default function CustomersPage() {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label className="form-label">Customer Name *</label>
-                <input className="form-input" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Ahmed Ali" />
-              </div>
-              <div className="form-group">
                 <label className="form-label">Telesom Number *</label>
                 <input className="form-input" value={form.telesom_number} onChange={e => setForm(f => ({ ...f, telesom_number: e.target.value }))} placeholder="634284015" />
                 <span className="form-hint">9 nambar (Tusaale: 634284015) — Ha ku darin 0 hore.</span>
@@ -212,10 +209,6 @@ export default function CustomersPage() {
               <div className="form-group">
                 <label className="form-label">Somtel Number * (receives internet bundle)</label>
                 <input className="form-input" value={form.somtel_number} onChange={e => setForm(f => ({ ...f, somtel_number: e.target.value }))} placeholder="657575175" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Notes</label>
-                <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." style={{ minHeight: 60 }} />
               </div>
               <div className="form-group">
                 <label className="toggle-wrapper">
@@ -246,7 +239,7 @@ export default function CustomersPage() {
             </div>
             <div className="modal-body">
               <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{deleteConfirm.customer_name}</strong> ({deleteConfirm.telesom_number})?
+                Are you sure you want to delete <strong style={{ color: 'var(--text-primary)' }}>{deleteConfirm.telesom_number}</strong>?
                 <br /><br />This action cannot be undone. Future payments from this number will not be automatically recharged.
               </p>
             </div>
