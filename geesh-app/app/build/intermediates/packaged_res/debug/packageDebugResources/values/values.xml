@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Required by SHUBE to automate multi-step USSD transactions for automated internet bundle recharge. This service intercepts USSD dialogs and enters the required numbers automatically.</string>
+    <string name="app_name">SHUBE</string>
+    <style name="Base.Theme.Shube" parent="Theme.Material3.DayNight.NoActionBar">
+        
+        
+    </style>
+    <style name="Theme.Shube" parent="Base.Theme.Shube"/>
+</resources>

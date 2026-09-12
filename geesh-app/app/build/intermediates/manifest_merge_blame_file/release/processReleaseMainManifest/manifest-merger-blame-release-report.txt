@@ -1,0 +1,217 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.geesh.app"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <!-- Permissions -->
+12    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+12-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:6:5-70
+12-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:6:22-67
+13    <uses-permission android:name="android.permission.READ_SMS" />
+13-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:7:5-67
+13-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:7:22-64
+14    <uses-permission android:name="android.permission.CALL_PHONE" />
+14-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:8:5-69
+14-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:8:22-66
+15    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+15-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:9:5-77
+15-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:9:22-74
+16    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+16-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:10:5-87
+16-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:10:22-84
+17    <uses-permission android:name="android.permission.WAKE_LOCK" />
+17-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:11:5-68
+17-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:11:22-65
+18    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+18-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:12:5-81
+18-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:12:22-78
+19    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+19-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:13:5-77
+19-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:13:22-74
+20
+21    <permission
+21-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+22        android:name="com.geesh.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+22-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+23        android:protectionLevel="signature" />
+23-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+24
+25    <uses-permission android:name="com.geesh.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+25-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+25-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+26
+27    <application
+27-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:15:5-65:19
+28        android:name="com.geesh.app.GeeshApplication"
+28-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:16:9-41
+29        android:allowBackup="true"
+29-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:17:9-35
+30        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+30-->[androidx.core:core:1.13.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\64a56d83ca34e22a675ac5c2040359c4\workspace\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+31        android:extractNativeLibs="false"
+32        android:icon="@mipmap/ic_launcher"
+32-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:18:9-43
+33        android:label="Geesh"
+33-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:19:9-30
+34        android:roundIcon="@mipmap/ic_launcher_round"
+34-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:20:9-54
+35        android:supportsRtl="true"
+35-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:21:9-35
+36        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" >
+36-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:22:9-68
+37
+38        <!-- Main Activity -->
+39        <activity
+39-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:26:9-34:20
+40            android:name="com.geesh.app.MainActivity"
+40-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:27:13-41
+41            android:exported="true"
+41-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:28:13-36
+42            android:screenOrientation="portrait" >
+42-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:29:13-49
+43            <intent-filter>
+43-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:30:13-33:29
+44                <action android:name="android.intent.action.MAIN" />
+44-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:31:17-69
+44-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:31:25-66
+45
+46                <category android:name="android.intent.category.LAUNCHER" />
+46-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:32:17-77
+46-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:32:27-74
+47            </intent-filter>
+48        </activity>
+49
+50        <!-- SMS Receiver — highest priority to capture messages before other apps -->
+51        <receiver
+51-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:37:9-44:20
+52            android:name="com.geesh.app.service.GeeshSmsReceiver"
+52-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:38:13-53
+53            android:exported="true"
+53-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:39:13-36
+54            android:permission="android.permission.BROADCAST_SMS" >
+54-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:40:13-66
+55            <intent-filter android:priority="2147483647" >
+55-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:41:13-43:29
+55-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:41:28-57
+56                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+56-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:42:17-82
+56-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:42:25-79
+57            </intent-filter>
+58        </receiver>
+59
+60        <!-- Foreground Service -->
+61        <service
+61-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:47:9-50:40
+62            android:name="com.geesh.app.service.GeeshForegroundService"
+62-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:48:13-59
+63            android:exported="false"
+63-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:50:13-37
+64            android:foregroundServiceType="dataSync" />
+64-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:49:13-53
+65
+66        <!-- Accessibility Service — for automatic PIN entry in USSD dialogs -->
+67        <service
+67-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:53:9-63:19
+68            android:name="com.geesh.app.ussd.GeeshAccessibilityService"
+68-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:54:13-59
+69            android:exported="true"
+69-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:56:13-36
+70            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" >
+70-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:55:13-79
+71            <intent-filter>
+71-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:57:13-59:29
+72                <action android:name="android.accessibilityservice.AccessibilityService" />
+72-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:58:17-92
+72-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:58:25-89
+73            </intent-filter>
+74
+75            <meta-data
+75-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:60:13-62:78
+76                android:name="android.accessibilityservice"
+76-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:61:17-60
+77                android:resource="@xml/geesh_accessibility_service_config" />
+77-->C:\Users\Administrator\Documents\Shube\geesh-app\app\src\main\AndroidManifest.xml:62:17-75
+78        </service>
+79
+80        <provider
+80-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+81            android:name="androidx.startup.InitializationProvider"
+81-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:25:13-67
+82            android:authorities="com.geesh.app.androidx-startup"
+82-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:26:13-68
+83            android:exported="false" >
+83-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:27:13-37
+84            <meta-data
+84-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+85                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+85-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:30:17-75
+86                android:value="androidx.startup" />
+86-->[androidx.emoji2:emoji2:1.3.0] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\dde7a74608e568d8ffd7c5dbf1817733\workspace\transformed\jetified-emoji2-1.3.0\AndroidManifest.xml:31:17-49
+87            <meta-data
+87-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\89d0b45fad7aa1df779df1dfd24fdb3c\workspace\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:29:13-31:52
+88                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+88-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\89d0b45fad7aa1df779df1dfd24fdb3c\workspace\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:30:17-78
+89                android:value="androidx.startup" />
+89-->[androidx.lifecycle:lifecycle-process:2.8.7] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\89d0b45fad7aa1df779df1dfd24fdb3c\workspace\transformed\jetified-lifecycle-process-2.8.7\AndroidManifest.xml:31:17-49
+90            <meta-data
+90-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+91                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+91-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+92                android:value="androidx.startup" />
+92-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+93        </provider>
+94
+95        <service
+95-->[androidx.room:room-runtime:2.6.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\4d72eda6eacec385d2292054542baa36\workspace\transformed\room-runtime-2.6.1\AndroidManifest.xml:24:9-28:63
+96            android:name="androidx.room.MultiInstanceInvalidationService"
+96-->[androidx.room:room-runtime:2.6.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\4d72eda6eacec385d2292054542baa36\workspace\transformed\room-runtime-2.6.1\AndroidManifest.xml:25:13-74
+97            android:directBootAware="true"
+97-->[androidx.room:room-runtime:2.6.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\4d72eda6eacec385d2292054542baa36\workspace\transformed\room-runtime-2.6.1\AndroidManifest.xml:26:13-43
+98            android:exported="false" />
+98-->[androidx.room:room-runtime:2.6.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\4d72eda6eacec385d2292054542baa36\workspace\transformed\room-runtime-2.6.1\AndroidManifest.xml:27:13-37
+99
+100        <receiver
+100-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+101            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+101-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+102            android:directBootAware="false"
+102-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+103            android:enabled="true"
+103-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+104            android:exported="true"
+104-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+105            android:permission="android.permission.DUMP" >
+105-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+106            <intent-filter>
+106-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+107                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+107-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+107-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+108            </intent-filter>
+109            <intent-filter>
+109-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+110                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+110-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+110-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+111            </intent-filter>
+112            <intent-filter>
+112-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+113                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+113-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+113-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+114            </intent-filter>
+115            <intent-filter>
+115-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+116                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+116-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+116-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\Administrator\.gradle\caches\9.3.0\transforms\94a920c9373596761bd25449dde5cd7e\workspace\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+117            </intent-filter>
+118        </receiver>
+119    </application>
+120
+121</manifest>

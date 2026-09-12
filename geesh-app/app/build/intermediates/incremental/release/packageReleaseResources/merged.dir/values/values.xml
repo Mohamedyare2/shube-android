@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Geesh App wuxuu u baahan yahay ogolaanshahan si uu automatikiga ah lacagta USSD-ga ugu diro (PIN geli)</string>
+    <string name="app_name">Geesh</string>
+    <style name="Base.Theme.Shube" parent="Theme.Material3.DayNight.NoActionBar">
+        
+        
+    </style>
+    <style name="Theme.Shube" parent="Base.Theme.Shube"/>
+</resources>

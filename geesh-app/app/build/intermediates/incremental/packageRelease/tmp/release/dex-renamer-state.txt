@@ -1,0 +1,4 @@
+#Thu Sep 10 14:49:12 EAT 2026
+base.0=C\:\\Users\\Administrator\\Documents\\Shube\\geesh-app\\app\\build\\intermediates\\dex\\release\\minifyReleaseWithR8\\classes.dex
+path.0=classes.dex
+renamed.0=classes.dex

@@ -1,0 +1,54 @@
+[
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/xml_backup_rules.xml.flat",
+        "source": "com.shube.app-main-82:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/xml_data_extraction_rules.xml.flat",
+        "source": "com.shube.app-main-82:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/xml_accessibility_service_config.xml.flat",
+        "source": "com.shube.app-main-82:/xml/accessibility_service_config.xml"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.shube.app-debug-80:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.shube.app-main-82:/mipmap-xxxhdpi/ic_launcher_round.png"
+    }
+]
