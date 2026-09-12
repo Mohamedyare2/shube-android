@@ -298,6 +298,87 @@ export default function DownloadPage() {
         </div>
       )}
 
+      {/* ── Geesh App Hero Card ──────────────────────────────────────── */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.08) 100%)',
+        border: '1.5px solid rgba(16,185,129,0.3)',
+        borderRadius: 'var(--radius-xl)',
+        padding: 'var(--space-6)',
+        marginBottom: 'var(--space-5)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Background glow */}
+        <div style={{
+          position: 'absolute', top: -60, right: -60, width: 200, height: 200,
+          background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
+              <div style={{ fontSize: '3rem' }}>💸</div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: 800 }}>
+                    Geesh App
+                  </h2>
+                  <span style={{
+                    background: 'rgba(16,185,129,0.2)', color: '#34D399',
+                    border: '1px solid rgba(16,185,129,0.4)',
+                    borderRadius: '99px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 700
+                  }}>
+                    ✓ LATEST
+                  </span>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>
+                  Version <strong style={{ color: 'var(--brand-accent)' }}>v1.0.0</strong>
+                  &nbsp;·&nbsp; Build 1
+                  &nbsp;·&nbsp; 25.9 MB
+                  &nbsp;·&nbsp; Geesh Automated Payment Processor
+                </div>
+              </div>
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: 'var(--space-2)', maxWidth: 500, lineHeight: 1.6 }}>
+              📝 App-kan wuxuu si toos ah u akhriyaa fariimaha Adeega Sarifka (898) wuxuuna si toos ah dollar-ka ugu sii wadaa nambarka aad dooratay (USSD Auto-forward).
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', minWidth: 200 }}>
+            <a
+              href="/downloads/geesh-latest.apk"
+              download
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '12px 20px', borderRadius: 'var(--radius-lg)',
+                background: '#10B981', color: 'white',
+                fontWeight: 700, fontSize: '0.95rem', textDecoration: 'none',
+                boxShadow: '0 4px 14px rgba(16,185,129,0.4)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              ⬇️ Download Geesh APK
+            </a>
+            <button
+              onClick={() => copyLink(window.location.origin + '/downloads/geesh-latest.apk', 'geesh-apk')}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '10px 20px', borderRadius: 'var(--radius-lg)',
+                background: 'var(--bg-surface-2)',
+                border: '1px solid var(--border-subtle)',
+                color: copied === 'geesh-apk' ? 'var(--brand-success)' : 'var(--text-secondary)',
+                fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {copied === 'geesh-apk' ? '✅ Copied!' : '🔗 Copy Download Link'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ── Setup & Pairing Guide ────────────────────────────────────── */}
       <div className="card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-5)', background: 'var(--bg-surface-2)' }}>
         <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
