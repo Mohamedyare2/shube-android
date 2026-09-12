@@ -1,0 +1,38 @@
+name: Build Geesh APK
+
+on:
+  push:
+    paths:
+      - 'geesh-app/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Build APK
+        working-directory: ./geesh-app
+        run: gradle assembleDebug
+
+      - name: Commit and Push APK
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          cp geesh-app/app/build/outputs/apk/debug/app-debug.apk admin-dashboard/public/downloads/geesh-latest.apk
+          git add admin-dashboard/public/downloads/geesh-latest.apk
+          git commit -m "chore: auto-build Geesh APK [skip ci]" || echo "No changes to commit"
+          git push
