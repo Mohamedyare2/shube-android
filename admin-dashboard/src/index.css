@@ -398,50 +398,57 @@ input, select, textarea { font-family: inherit; }
   padding: var(--space-6);
   position: relative;
   overflow: hidden;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: transform var(--transition-fast), box-shadow var(--transition-med);
+  backdrop-filter: blur(8px);
 }
 
 .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(59,130,246,0.08);
 }
 
-.stat-card::before {
+/* Gradient shimmer overlay on hover */
+.stat-card::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--card-accent, var(--brand-primary));
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
+.stat-card:hover::after { opacity: 1; }
 
 .stat-card-icon {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-md);
   background: var(--card-accent-bg, rgba(59, 130, 246, 0.1));
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: var(--space-4);
-  font-size: 1.25rem;
+  font-size: 1.3rem;
+  transition: transform var(--transition-fast);
 }
+.stat-card:hover .stat-card-icon { transform: scale(1.1) rotate(-4deg); }
 
 .stat-value {
   font-size: 2rem;
-  font-weight: 800;
+  font-weight: 900;
   color: var(--text-primary);
   line-height: 1;
   margin-bottom: var(--space-1);
+  letter-spacing: -0.02em;
+  font-family: 'Inter', monospace;
 }
 
 .stat-label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
 }
 
 .stat-change {
@@ -462,7 +469,10 @@ input, select, textarea { font-family: inherit; }
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   overflow: hidden;
+  transition: box-shadow var(--transition-med);
 }
+
+.card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
 
 .card-header {
   display: flex;
@@ -470,12 +480,14 @@ input, select, textarea { font-family: inherit; }
   justify-content: space-between;
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 100%);
 }
 
 .card-title {
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .card-subtitle { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
@@ -943,25 +955,25 @@ tr:hover td { background: var(--bg-surface-2); }
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-subtle);
   transition: background var(--transition-fast);
-  animation: feed-slide-in 0.3s ease;
+  animation: feed-slide-in 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
 @keyframes feed-slide-in {
-  from { opacity: 0; transform: translateX(-8px); }
+  from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: none; }
 }
 
-.live-feed-item:hover { background: var(--bg-surface-2); }
+.live-feed-item:hover { background: rgba(59,130,246,0.04); }
 .live-feed-item:last-child { border-bottom: none; }
 
-.feed-time { font-size: 0.7rem; color: var(--text-muted); font-family: monospace; white-space: nowrap; padding-top: 2px; }
+.feed-time { font-size: 0.68rem; color: var(--text-muted); font-family: monospace; white-space: nowrap; padding-top: 3px; min-width: 64px; }
 .feed-content { flex: 1; min-width: 0; }
-.feed-numbers { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: 0.875rem; font-weight: 600; }
+.feed-numbers { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: 0.82rem; font-weight: 600; }
 .feed-arrow { color: var(--text-muted); }
-.feed-meta { font-size: 0.75rem; color: var(--text-secondary); margin-top: 4px; }
+.feed-meta { font-size: 0.7rem; color: var(--text-secondary); margin-top: 3px; }
 
 /* ============================================================ */
 /* EMPTY STATES                                                  */

@@ -56,6 +56,25 @@ INSERT INTO public.app_releases (
     'Nooca ugu horeeyay ee SHUBE Gateway App. Waxaa ku jira: USSD auto-processing, SMS parsing, Supabase real-time sync, iyo secure device pairing.',
     '/downloads/shube-latest.apk',
     25961298,
+    FALSE,
+    FALSE
+)
+ON CONFLICT (version_code) DO NOTHING;
+
+INSERT INTO public.app_releases (
+    version,
+    version_code,
+    release_notes,
+    apk_url,
+    file_size_bytes,
+    is_latest,
+    force_update
+) VALUES (
+    '1.0.1',
+    2,
+    'Bugfix: Wuxuu xalinayaa cilladii ahayd in SMS-ka lacag dirista loo fahmo lacag soo dhacday.',
+    '/downloads/shube-latest.apk',
+    25961298,
     TRUE,
     FALSE
 )

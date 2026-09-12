@@ -22,6 +22,19 @@ class SmsParser {
     private val txIdPattern = Pattern.compile("Tix[:\\s]*([A-Za-z0-9]+)|Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(messageBody: String, sender: String): ParsedSms? {
+        // Prevent processing outgoing transfers
+        if (messageBody.contains("ayaad u dirtay", ignoreCase = true)) {
+            return null
+        }
+
+        // Ensure it is an incoming payment
+        val isIncoming = messageBody.contains("ka heshay", ignoreCase = true) || 
+                         messageBody.contains("received", ignoreCase = true)
+        
+        if (!isIncoming) {
+            return null
+        }
+
         val amountMatcher = amountPattern.matcher(messageBody)
         if (!amountMatcher.find()) {
             return null // Cannot determine amount, invalid payment SMS
