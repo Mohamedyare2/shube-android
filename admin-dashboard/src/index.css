@@ -1402,10 +1402,12 @@ tr:hover td { background: var(--bg-surface-2); }
     to   { transform: translateY(0); }
   }
 
-  /* Stack stat grid to 2 cols on small screens */
-  .stat-grid { grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-  .stat-value { font-size: 1.5rem; }
-  .stat-card  { padding: var(--space-4); }
+  /* Force 2 cols on all mobile screens */
+  .stat-grid { grid-template-columns: 1fr 1fr !important; gap: var(--space-3); }
+  .stat-value { font-size: 1.35rem; }
+  .stat-label { font-size: 0.65rem; }
+  .stat-card-icon { width: 36px; height: 36px; font-size: 1.1rem; margin-bottom: var(--space-3); }
+  .stat-card  { padding: var(--space-4) var(--space-3); }
 
   /* Device grid single column */
   .device-grid { grid-template-columns: 1fr; }
@@ -1422,9 +1424,11 @@ tr:hover td { background: var(--bg-surface-2); }
 }
 
 @media (max-width: 380px) {
-  .stat-grid { grid-template-columns: 1fr; }
+  .stat-card  { padding: var(--space-3) var(--space-2); }
+  .stat-value { font-size: 1.15rem; }
+  .stat-label { font-size: 0.6rem; letter-spacing: 0; }
+  .stat-change { font-size: 0.65rem; }
 }
-
 /* ============================================================ */
 /* BOTTOM NAVIGATION BAR (Mobile only)                           */
 /* ============================================================ */

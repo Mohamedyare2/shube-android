@@ -336,10 +336,10 @@ export default function DashboardPage() {
       )}
 
       {/* ── STAT CARDS ─────────────────────────────────────────────── */}
-      <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', marginBottom: 'var(--space-5)' }}>
+      <div className="stat-grid" style={{ marginBottom: 'var(--space-5)' }}>
         {statCards.map((card, i) => (
           <div key={i} className="stat-card" style={{
-            background: `var(--bg-surface)`,
+            background: `linear-gradient(145deg, ${card.bg.replace('0.08', '0.12')} 0%, var(--bg-surface) 100%)`,
             border: `1px solid ${card.border}`,
             boxShadow: `0 4px 24px ${card.glow}, inset 0 1px 0 rgba(255,255,255,0.04)`,
             '--card-accent': card.gradient,
