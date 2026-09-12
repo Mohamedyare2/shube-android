@@ -52,7 +52,7 @@ export default function CustomersPage() {
   }
 
   async function handleSave() {
-    if (!form.customer_name || !form.telesom_number || !form.somtel_number) {
+    if (!form.telesom_number || !form.somtel_number) {
       toast('All fields are required', 'error'); return
     }
     // Basic phone validation — Telesom: 9 digits (e.g. 634284015), Somtel: 9 digits starting with 65

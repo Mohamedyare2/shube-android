@@ -123,13 +123,14 @@ class ApiService(private val context: Context) {
         }
 
     private fun getBatteryLevel(): Int {
-        // Method 1: BatteryManager.BATTERY_PROPERTY_CAPACITY (direct hardware query)
+        // Method 1: BatteryManager.BATTERY_PROPERTY_CAPACITY (most reliable on Android 5+)
         try {
             val bm = context.getSystemService(android.content.Context.BATTERY_SERVICE) as? android.os.BatteryManager
             if (bm != null) {
                 val cap = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                Log.d("ApiService", "Battery method1 raw cap=$cap")
                 if (cap in 1..100) {
-                    Log.d("ApiService", "Battery (capacity property): $cap%")
+                    Log.d("ApiService", "Battery (BatteryManager): $cap%")
                     return cap
                 }
             }
@@ -137,25 +138,28 @@ class ApiService(private val context: Context) {
             Log.w("ApiService", "Battery method1 failed: ${e.message}")
         }
 
-        // Method 2: IntentFilter sticky broadcast
+        // Method 2: Sticky broadcast (works on all Android versions)
         try {
             val ifilter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
-            val intent = context.registerReceiver(null, ifilter)
+            val intent = context.applicationContext.registerReceiver(null, ifilter)
             if (intent != null) {
                 val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
                 val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
-                if (level >= 0 && scale > 0) {
+                Log.d("ApiService", "Battery method2 raw level=$level scale=$scale")
+                if (level > 0 && scale > 0) {
                     val pct = (level * 100f / scale).toInt()
-                    Log.d("ApiService", "Battery (sticky intent): $pct% level=$level scale=$scale")
+                    Log.d("ApiService", "Battery (StickyBroadcast): $pct%")
                     return pct
                 }
+            } else {
+                Log.w("ApiService", "Battery method2: registerReceiver returned null")
             }
         } catch (e: Exception) {
             Log.w("ApiService", "Battery method2 failed: ${e.message}")
         }
 
-        Log.w("ApiService", "Battery: could not read — returning -1 as sentinel")
-        return -1 // Sentinel so server knows the read failed
+        Log.w("ApiService", "Battery: ALL methods failed — returning -1 sentinel")
+        return -1 // Sentinel: server will NOT overwrite existing DB value
     }
 
     private fun getIsCharging(): Boolean {
@@ -167,14 +171,25 @@ class ApiService(private val context: Context) {
     }
 
     private fun getNetworkType(): String {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork ?: return "OFFLINE"
-        val caps = cm.getNetworkCapabilities(network) ?: return "OFFLINE"
-        return when {
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WiFi"
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> getCellularType(caps)
-            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
-            else -> "Unknown"
+        return try {
+            val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return "Unknown"
+            val network = cm.activeNetwork ?: return "Offline"
+            val caps = cm.getNetworkCapabilities(network) ?: return "Offline"
+            val result = when {
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WiFi"
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> getCellularType(caps)
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "Ethernet"
+                else -> "Unknown"
+            }
+            Log.d("ApiService", "Network type: $result")
+            result
+        } catch (e: SecurityException) {
+            Log.w("ApiService", "Network: SecurityException — ${e.message}")
+            "Unknown"
+        } catch (e: Exception) {
+            Log.w("ApiService", "Network: failed — ${e.message}")
+            "Unknown"
         }
     }
 
