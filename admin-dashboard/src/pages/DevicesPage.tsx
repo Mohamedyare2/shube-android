@@ -200,13 +200,27 @@ export default function DevicesPage() {
                       Last seen: {lastActivity ? timeAgo(lastActivity) : 'Never'}
                     </span>
                     {!isOperator ? (
-                      <button
-                        className={`btn ${dev.revoked ? 'btn-secondary' : 'btn-danger'}`}
-                        style={{ padding: '4px 12px', fontSize: '0.75rem' }}
-                        onClick={() => toggleRevoke(dev)}
-                      >
-                        {dev.revoked ? 'Restore' : 'Revoke'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          className={`btn ${dev.revoked ? 'btn-secondary' : 'btn-danger'}`}
+                          style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                          onClick={() => toggleRevoke(dev)}
+                        >
+                          {dev.revoked ? 'Restore' : 'Revoke'}
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          style={{ padding: '4px 12px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--brand-danger)', color: 'var(--brand-danger)' }}
+                          onClick={async () => {
+                            if (!window.confirm("Ma hubtaa inaad tirtirto device-kan si buuxda? (Operator-ka ayaa awoodi doona inuu mid cusub ku xirto)")) return
+                            const { error } = await supabase.from('devices').delete().eq('id', dev.id)
+                            if (error) toast(error.message, 'error')
+                            else { toast("Device la tirtiray", "success"); load() }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     ) : (
                       <button
                         className="btn btn-danger"

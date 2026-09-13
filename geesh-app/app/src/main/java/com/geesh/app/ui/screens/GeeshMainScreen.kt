@@ -34,8 +34,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @Composable
-fun GeeshMainScreen() {
+fun GeeshMainScreen(onLogout: () -> Unit = {}) {
     val context = LocalContext.current
+    val prefs = remember { com.geesh.app.local.LocalPrefs(context) }
+    val ussdTemplate = prefs.ussdTemplate ?: "*806*0633920307*{lacag}*2050#"
+    val username = prefs.username ?: "Unknown"
 
     var accessibilityActive by remember { mutableStateOf(GeeshAccessibilityService.isServiceActive) }
     var recentTxns by remember { mutableStateOf<List<ProcessedTransaction>>(emptyList()) }
@@ -70,8 +73,22 @@ fun GeeshMainScreen() {
                 Text("G", fontSize = 40.sp, fontWeight = FontWeight.Black, color = Color.White)
             }
             Spacer(Modifier.height(10.dp))
-            Text("Geesh App", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Text("Lacag Sarifka Automatic • Offline", fontSize = 13.sp, color = Color.White.copy(alpha = 0.45f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Geesh App", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Lacag Sarifka Automatic", fontSize = 13.sp, color = Color.White.copy(alpha = 0.45f))
+                    Text("User: @$username", fontSize = 12.sp, color = purple, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = onLogout,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
+                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+            ) {
+                Text("Bax (Logout)", fontSize = 12.sp, color = Color.White)
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -123,9 +140,9 @@ fun GeeshMainScreen() {
                 shape    = RoundedCornerShape(12.dp)
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    InfoLine("👤", "Operator", "@$username")
                     InfoLine("📡", "Sender", "898")
-                    InfoLine("📞", "USSD", "*806*0633920307*{lacag}*2050#")
-                    InfoLine("🔐", "PIN", "3495")
+                    InfoLine("📞", "USSD", ussdTemplate)
                 }
             }
 

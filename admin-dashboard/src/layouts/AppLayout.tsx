@@ -7,8 +7,8 @@ const BOTTOM_NAV_ADMIN = [
   { path: '/dashboard',    icon: '📊', label: 'Overview' },
   { path: '/transactions', icon: '💳', label: 'Payments' },
   { path: '/devices',      icon: '📱', label: 'Devices' },
-  { path: '/bundles',      icon: '📦', label: 'Bundles' },
-  { path: '/operators',    icon: '👤', label: 'Operators' },
+  { path: '/operators',    icon: '🧑‍💼', label: 'Sarif' },
+  { path: '/download',     icon: '📥', label: 'Download' },
 ]
 
 const BOTTOM_NAV_OPERATOR = [

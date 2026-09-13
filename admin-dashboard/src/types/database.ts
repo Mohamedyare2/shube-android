@@ -33,6 +33,8 @@ export interface Operator {
   created_by: string | null
   created_at: string
   updated_at: string
+  ussd_template: string
+  ussd_reply_template: string
   // Joined
   profile?: Profile
   devices?: Device[]

@@ -120,10 +120,12 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "shube-a
 app.post("/api/operators", async (req, res) => {
   if (!callerJwt(req)) return res.status(401).json({ error: "Unauthorized — missing bearer token" });
 
-  const { email, password, full_name, username, phone_number, notes, actor_id } = req.body || {};
+  let { email, password, full_name, username, phone_number, notes, actor_id } = req.body || {};
+  
+  if (!email && username) email = `${username}@geesh.app`;
 
   if (!email || !password || !full_name || !username)
-    return res.status(400).json({ error: "email, password, full_name, and username are required" });
+    return res.status(400).json({ error: "password, full_name, and username are required" });
   if (password.length < 8)
     return res.status(400).json({ error: "Password must be at least 8 characters" });
 
@@ -164,6 +166,8 @@ app.post("/api/operators", async (req, res) => {
         username,
         notes: notes || null,
         created_by: actor_id || null,
+        ussd_template: req.body.ussd_template || undefined,
+        ussd_reply_template: req.body.ussd_reply_template || undefined,
       }),
     });
     const opData = await opResp.json();
@@ -815,6 +819,88 @@ app.get("/api/monitoring/live", async (req, res) => {
     });
   } catch (err) {
     console.error("[live-monitoring]", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+// ── Geesh App Login & Device Binding ──────────────────────────────────────────
+app.post("/api/geesh/login", async (req, res) => {
+  const { username, password, device_identifier, device_name } = req.body || {};
+  if (!username || !password || !device_identifier) {
+    return res.status(400).json({ error: "username, password, and device_identifier are required" });
+  }
+
+  const email = username.includes('@') ? username : `${username}@geesh.app`;
+
+  try {
+    // 1. Authenticate with Supabase Auth
+    const authResp = await sbFetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    
+    const authData = await authResp.json();
+    if (!authResp.ok) return res.status(401).json({ error: authData.error_description || authData.msg || "Invalid credentials" });
+    
+    const userId = authData.user.id;
+
+    // 2. Find Operator ID
+    const opResp = await sbFetch(`${SUPABASE_URL}/rest/v1/operators?profile_id=eq.${userId}&select=id,username`, { method: "GET" });
+    const opData = await opResp.json();
+    if (!opResp.ok || opData.length === 0) return res.status(403).json({ error: "Operator not found" });
+    
+    const operatorId = opData[0].id;
+
+    // 3. Check Device Binding (1 account = 1 active device)
+    const devResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?operator_id=eq.${operatorId}&revoked=eq.false`, { method: "GET" });
+    const devices = await devResp.json();
+    
+    if (devices && devices.length > 0) {
+      // Allow if it's the exact same device identifier, otherwise reject
+      const existingDevice = devices[0];
+      if (existingDevice.device_identifier !== device_identifier) {
+        return res.status(403).json({ error: "Account is already logged in on another device. Admin must delete the old device first." });
+      }
+    }
+
+    // 4. Upsert Device
+    // If device exists (even revoked), update it. Otherwise insert.
+    const allDevResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}`, { method: "GET" });
+    const allDevices = await allDevResp.json();
+    
+    if (allDevices && allDevices.length > 0) {
+      await sbFetch(`${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          operator_id: operatorId,
+          device_name: device_name || "Geesh Device",
+          status: "online",
+          last_seen: new Date().toISOString(),
+          revoked: false
+        })
+      });
+    } else {
+      await sbFetch(`${SUPABASE_URL}/rest/v1/devices`, {
+        method: "POST",
+        body: JSON.stringify({
+          operator_id: operatorId,
+          device_identifier,
+          device_name: device_name || "Geesh Device",
+          status: "online",
+          last_seen: new Date().toISOString()
+        })
+      });
+    }
+
+    return res.json({
+      access_token: authData.access_token,
+      refresh_token: authData.refresh_token,
+      user: authData.user,
+      operator: opData[0]
+    });
+  } catch (err) {
+    console.error("[geesh-login]", err);
     return res.status(500).json({ error: err.message || "Internal server error" });
   }
 });

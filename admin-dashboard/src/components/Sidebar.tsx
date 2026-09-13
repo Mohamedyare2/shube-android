@@ -13,7 +13,7 @@ interface NavItem {
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { section: 'Overview',     path: '/dashboard',    icon: '📊', label: 'Global Dashboard' },
   { path: '/transactions',   icon: '💳', label: 'All Transactions' },
-  { section: 'Management',   path: '/operators',    icon: '👤', label: 'Operators' },
+  { section: 'Management',   path: '/operators',    icon: '🧑‍💼', label: 'Sarif Operators' },
   { path: '/devices',        icon: '📱', label: 'All Devices' },
   { path: '/customers',      icon: '👥', label: 'Customers' },
   { path: '/bundles',        icon: '📦', label: 'Bundle Rules' },

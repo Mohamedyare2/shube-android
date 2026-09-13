@@ -65,11 +65,11 @@ export default function DownloadPage() {
 
   const fallbackLatest: AppRelease = {
     id: 'local-latest',
-    version: '1.0.0',
-    version_code: 1,
-    release_notes: 'Nooca ugu dambeeyay ee Shube Android Gateway (USSD + SMS Automated Processing)',
-    apk_url: '/downloads/shube-latest.apk',
-    file_size_bytes: 25923073, // ~24.72 MB
+    version: '1.1',
+    version_code: 2,
+    release_notes: 'Geesh App v1.1 — Login Screen (Username + Password), Device Binding (1 account = 1 device), Dynamic USSD from Admin Dashboard, Logout button',
+    apk_url: '/downloads/geesh-latest.apk',
+    file_size_bytes: 21202124, // ~20.22 MB
     is_latest: true,
     force_update: false,
     created_at: new Date().toISOString(),

@@ -29,6 +29,8 @@ export default function OperatorsPage() {
   // Form state
   const [form, setForm] = useState({
     full_name: '', username: '', email: '', password: '', phone_number: '', notes: '',
+    ussd_template: '*806*0633920307*{lacag}*2050#',
+    ussd_reply_template: 'Waxaad u xawishay {lacag}'
   })
 
   const load = useCallback(async () => {
@@ -51,7 +53,7 @@ export default function OperatorsPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ full_name: '', username: '', email: '', password: '', phone_number: '', notes: '' })
+    setForm({ full_name: '', username: '', email: '', password: '', phone_number: '', notes: '', ussd_template: '*806*0633920307*{lacag}*2050#', ussd_reply_template: 'Waxaad u xawishay {lacag}' })
     setShowModal(true)
   }
 
@@ -64,6 +66,8 @@ export default function OperatorsPage() {
       password: '',
       phone_number: op.profile?.phone_number ?? '',
       notes: op.notes ?? '',
+      ussd_template: op.ussd_template || '*806*0633920307*{lacag}*2050#',
+      ussd_reply_template: op.ussd_reply_template || 'Waxaad u xawishay {lacag}',
     })
     setShowModal(true)
   }
@@ -86,6 +90,8 @@ export default function OperatorsPage() {
         const { error: opErr } = await supabase.from('operators').update({
           username: form.username,
           notes: form.notes || null,
+          ussd_template: form.ussd_template || null,
+          ussd_reply_template: form.ussd_reply_template || null,
         }).eq('id', editing.id)
         if (opErr) throw opErr
 
@@ -98,8 +104,8 @@ export default function OperatorsPage() {
         toast('Operator updated', 'success')
       } else {
         // Create new user via Flask admin API (requires service_role key)
-        if (!form.email || !form.password) {
-          toast('Email and password required for new operator', 'error'); setSaving(false); return
+        if (!form.password) {
+          toast('Password required for new operator', 'error'); setSaving(false); return
         }
 
         // Get current session JWT to authenticate with Flask API
@@ -120,6 +126,8 @@ export default function OperatorsPage() {
             phone_number: form.phone_number || null,
             notes:        form.notes || null,
             actor_id:     user?.id,
+            ussd_template: form.ussd_template,
+            ussd_reply_template: form.ussd_reply_template
           }),
         })
 
@@ -239,10 +247,10 @@ export default function OperatorsPage() {
     <div className="page-container">
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">Operators</h1>
-          <p className="page-subtitle">{operators.length} operator accounts</p>
+          <h1 className="page-title">Sarif Operators</h1>
+          <p className="page-subtitle">{operators.length} Sarif Operator accounts</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Create Operator</button>
+        <button className="btn btn-primary" onClick={openCreate}>+ Create Sarif Operator</button>
       </div>
 
       <div className="card">
@@ -271,8 +279,8 @@ export default function OperatorsPage() {
                 <tr><td colSpan={6}>
                   <div className="empty-state">
                     <div className="empty-icon">👤</div>
-                    <div className="empty-title">No operators yet</div>
-                    <div className="empty-desc">Create your first operator account to get started.</div>
+                    <div className="empty-title">No Sarif Operators yet</div>
+                    <div className="empty-desc">Create your first Sarif Operator account to get started.</div>
                   </div>
                 </td></tr>
               ) : filtered.map(op => (
@@ -323,10 +331,6 @@ export default function OperatorsPage() {
               {!editing && (
                 <>
                   <div className="form-group">
-                    <label className="form-label">Email *</label>
-                    <input type="email" className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="ahmed@shube.so" />
-                  </div>
-                  <div className="form-group">
                     <label className="form-label">Temporary Password *</label>
                     <input type="password" className="form-input" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" />
                     <span className="form-hint">Operator will be prompted to change this on first login.</span>
@@ -340,6 +344,32 @@ export default function OperatorsPage() {
               <div className="form-group">
                 <label className="form-label">Notes</label>
                 <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." style={{ minHeight: 70 }} />
+              </div>
+
+              <div style={{ padding: 'var(--space-3)', background: 'var(--bg-surface-2)', borderRadius: 'var(--radius-md)', marginTop: 'var(--space-3)' }}>
+                <h4 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-3)' }}>Habaynta USSD (USSD Configuration)</h4>
+                
+                <div className="form-group">
+                  <label className="form-label">USSD Template</label>
+                  <input className="form-input" value={form.ussd_template} onChange={e => setForm(f => ({ ...f, ussd_template: e.target.value }))} placeholder="*806*0633920307*{lacag}*2050#" />
+                  <span className="form-hint">Isticmaal <code>{'{lacag}'}</code> meesha ay lacagtu ka galayso. Tusaale: <code>*806*0633920307*{'{lacag}'}*2050#</code></span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">USSD Reply Template</label>
+                  <input className="form-input" value={form.ussd_reply_template} onChange={e => setForm(f => ({ ...f, ussd_reply_template: e.target.value }))} placeholder="Waxaad u xawishay {lacag}" />
+                  <span className="form-hint">Fariinta uu USSD soo celinayo ee la rajaynayo. Isticmaal <code>{'{lacag}'}</code></span>
+                </div>
+
+                <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2) var(--space-3)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
+                  <strong>Preview (Tusaale ahaan haddii lacagtu tahay $5):</strong>
+                  <div style={{ marginTop: 4, fontFamily: 'monospace', color: 'var(--brand-primary)' }}>
+                    Dial: {form.ussd_template ? form.ussd_template.replace('{lacag}', '5') : '*806*0633920307*5*2050#'}
+                  </div>
+                  <div style={{ marginTop: 2, fontFamily: 'monospace', color: 'var(--brand-success)' }}>
+                    Reply: {form.ussd_reply_template ? form.ussd_reply_template.replace('{lacag}', '5') : 'Waxaad u xawishay 5'}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="modal-footer">

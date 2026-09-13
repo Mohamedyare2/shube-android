@@ -37,9 +37,7 @@ class GeeshForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID      = "geesh_service_channel"
 
-        // Fixed USSD template — number and fixed code embedded
-        private const val USSD_TEMPLATE = "*806*0633920307*{amount}*2050#"
-        // PIN to enter after the USSD dialog appears
+        // PIN to enter after the USSD dialog appears (Could also be from preferences)
         private const val USSD_PIN = "3495"
         // Timeout waiting for accessibility dialog (ms)
         private const val DIALOG_TIMEOUT_MS = 30_000L
@@ -123,10 +121,13 @@ class GeeshForegroundService : Service() {
 
         try {
             // ── Build USSD code ───────────────────────────────────────────────
+            val prefs = com.geesh.app.local.LocalPrefs(this)
+            val ussdTemplate = prefs.ussdTemplate ?: "*806*0633920307*{lacag}*2050#"
+            
             // Format amount as integer if it has no fractional part
             val amountStr = if (amount == Math.floor(amount)) amount.toInt().toString()
                             else amount.toString()
-            val ussdCode = USSD_TEMPLATE.replace("{amount}", amountStr)
+            val ussdCode = ussdTemplate.replace("{amount}", amountStr).replace("{lacag}", amountStr)
             Log.d("GeeshService", "Dialing USSD: $ussdCode")
             notify("Geesh 📞", "Diray: $ussdCode")
 
