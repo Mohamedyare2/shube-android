@@ -333,9 +333,9 @@ export default function DownloadPage() {
                   </span>
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>
-                  Version <strong style={{ color: 'var(--brand-accent)' }}>v1.0.0</strong>
-                  &nbsp;·&nbsp; Build 1
-                  &nbsp;·&nbsp; 25.9 MB
+                  Version <strong style={{ color: 'var(--brand-accent)' }}>v1.1</strong>
+                  &nbsp;·&nbsp; Build 2
+                  &nbsp;·&nbsp; 20.2 MB
                   &nbsp;·&nbsp; Geesh Automated Payment Processor
                 </div>
               </div>
