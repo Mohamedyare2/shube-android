@@ -120,9 +120,15 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "shube-a
 app.post("/api/operators", async (req, res) => {
   if (!callerJwt(req)) return res.status(401).json({ error: "Unauthorized — missing bearer token" });
 
-  let { email, password, full_name, username, phone_number, notes, actor_id } = req.body || {};
+  let { email, password, full_name, username, phone_number, notes, actor_id, app_type } = req.body || {};
   
-  if (!email && username) email = `${username}@geesh.app`;
+  if (!email && username) {
+    if (app_type === 'shube') {
+      email = `${username}@shube.app`;
+    } else {
+      email = `${username}@geesh.app`;
+    }
+  }
 
   if (!email || !password || !full_name || !username)
     return res.status(400).json({ error: "password, full_name, and username are required" });
@@ -166,6 +172,7 @@ app.post("/api/operators", async (req, res) => {
         username,
         notes: notes || null,
         created_by: actor_id || null,
+        app_type: req.body.app_type || 'shube',
         ussd_template: req.body.ussd_template || undefined,
         ussd_reply_template: req.body.ussd_reply_template || undefined,
       }),
