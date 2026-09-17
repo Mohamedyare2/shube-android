@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Operator, Profile } from '../types/database'
-import { formatDate, formatDateTime, profileStatusClass } from '../lib/utils'
+import { formatDate, profileStatusClass } from '../lib/utils'
 import { useToast } from '../contexts/ToastContext'
 import { useAuth } from '../contexts/AuthContext'
-
-// Flask admin API — handles privileged Supabase Auth operations
-const ADMIN_API_URL = ''
 
 interface OperatorWithProfile extends Operator {
   profile: Profile
   device_count?: number
   transaction_count?: number
+  app_type?: 'shube' | 'geesh'
 }
+
+type AppTab = 'shube' | 'geesh'
 
 export default function OperatorsPage() {
   const { toast } = useToast()
@@ -25,12 +25,11 @@ export default function OperatorsPage() {
   const [saving, setSaving] = useState(false)
   const [showResetModal, setShowResetModal] = useState<OperatorWithProfile | null>(null)
   const [newPassword, setNewPassword] = useState('')
+  const [activeTab, setActiveTab] = useState<AppTab>('shube')
 
   // Form state
   const [form, setForm] = useState({
-    full_name: '', username: '', email: '', password: '', phone_number: '', notes: '',
-    ussd_template: '*806*0633920307*{lacag}*2050#',
-    ussd_reply_template: 'Waxaad u xawishay {lacag}'
+    full_name: '', username: '', email: '', password: '', phone_number: '', notes: ''
   })
 
   const load = useCallback(async () => {
@@ -39,12 +38,12 @@ export default function OperatorsPage() {
       .from('operators')
       .select(`*, profile:profiles!operators_profile_id_fkey(*)`)
       .order('created_at', { ascending: false })
-    
+
     if (error) {
       console.error('Supabase fetch error:', error)
       toast(error.message, 'error')
     }
-    
+
     if (data) setOperators(data as OperatorWithProfile[])
     setLoading(false)
   }, [toast])
@@ -53,7 +52,9 @@ export default function OperatorsPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ full_name: '', username: '', email: '', password: '', phone_number: '', notes: '', ussd_template: '*806*0633920307*{lacag}*2050#', ussd_reply_template: 'Waxaad u xawishay {lacag}' })
+    setForm({
+      full_name: '', username: '', email: '', password: '', phone_number: '', notes: ''
+    })
     setShowModal(true)
   }
 
@@ -66,8 +67,6 @@ export default function OperatorsPage() {
       password: '',
       phone_number: op.profile?.phone_number ?? '',
       notes: op.notes ?? '',
-      ussd_template: op.ussd_template || '*806*0633920307*{lacag}*2050#',
-      ussd_reply_template: op.ussd_reply_template || 'Waxaad u xawishay {lacag}',
     })
     setShowModal(true)
   }
@@ -87,15 +86,13 @@ export default function OperatorsPage() {
         if (profErr) throw profErr
 
         // Update operator
-        const { error: opErr } = await supabase.from('operators').update({
+        const updatePayload: Record<string, unknown> = {
           username: form.username,
           notes: form.notes || null,
-          ussd_template: form.ussd_template || null,
-          ussd_reply_template: form.ussd_reply_template || null,
-        }).eq('id', editing.id)
+        }
+        const { error: opErr } = await supabase.from('operators').update(updatePayload).eq('id', editing.id)
         if (opErr) throw opErr
 
-        // Log audit
         await supabase.from('audit_logs').insert({
           actor_id: user?.id, actor_role: 'admin', action: 'operator_updated',
           resource_type: 'operator', resource_id: editing.id,
@@ -103,32 +100,31 @@ export default function OperatorsPage() {
         })
         toast('Operator updated', 'success')
       } else {
-        // Create new user via Flask admin API (requires service_role key)
+        // Create new operator via admin API
         if (!form.password) {
           toast('Password required for new operator', 'error'); setSaving(false); return
         }
 
-        // Get current session JWT to authenticate with Flask API
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) throw new Error('Not authenticated')
 
+        const body: Record<string, unknown> = {
+          email:        form.email,
+          password:     form.password,
+          full_name:    form.full_name,
+          username:     form.username,
+          phone_number: form.phone_number || null,
+          notes:        form.notes || null,
+          actor_id:     user?.id,
+          app_type:     activeTab,
+        }
         const res = await fetch(`/api/operators`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({
-            email:        form.email,
-            password:     form.password,
-            full_name:    form.full_name,
-            username:     form.username,
-            phone_number: form.phone_number || null,
-            notes:        form.notes || null,
-            actor_id:     user?.id,
-            ussd_template: form.ussd_template,
-            ussd_reply_template: form.ussd_reply_template
-          }),
+          body: JSON.stringify(body),
         })
 
         if (!res.ok) {
@@ -136,7 +132,7 @@ export default function OperatorsPage() {
           throw new Error(err.error || 'Failed to create operator')
         }
 
-        toast('Operator created successfully', 'success')
+        toast(`${activeTab === 'geesh' ? 'Sarif Operator' : 'Operator'} created successfully`, 'success')
       }
       setShowModal(false)
       load()
@@ -168,7 +164,6 @@ export default function OperatorsPage() {
     }
     setSaving(true)
     try {
-      // Reset password via Flask admin API (requires service_role key)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
@@ -204,9 +199,9 @@ export default function OperatorsPage() {
   }
 
   async function handleDeleteOperator(op: OperatorWithProfile) {
-    if (!window.confirm(`Are you sure you want to PERMANENTLY delete operator ${op.username}?\nThis will delete their login account and all associated operator settings.\nTransactions and audit logs will remain but their reference to this operator may be lost.`)) {
-      return
-    }
+    if (!window.confirm(
+      `Are you sure you want to PERMANENTLY delete operator ${op.username}?\nThis will delete their login account and all associated operator settings.\nTransactions and audit logs will remain but their reference to this operator may be lost.`
+    )) return
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -218,10 +213,7 @@ export default function OperatorsPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          actor_id: user?.id,
-          username: op.username
-        }),
+        body: JSON.stringify({ actor_id: user?.id, username: op.username }),
       })
 
       if (!res.ok) {
@@ -237,27 +229,131 @@ export default function OperatorsPage() {
     }
   }
 
-  const filtered = operators.filter(op =>
+  // Filter by active tab (app_type). Operators with no app_type default to 'shube'.
+  const tabOperators = operators.filter(op => {
+    const type = op.app_type || 'shube'
+    return type === activeTab
+  })
+
+  const filtered = tabOperators.filter(op =>
     !search ||
     op.username.toLowerCase().includes(search.toLowerCase()) ||
     op.profile?.full_name?.toLowerCase().includes(search.toLowerCase())
   )
 
+  const shubCount = operators.filter(op => (op.app_type || 'shube') === 'shube').length
+  const geeshCount = operators.filter(op => op.app_type === 'geesh').length
+
+  const isGeesh = activeTab === 'geesh'
+
   return (
     <div className="page-container">
+      {/* ── Page Header ─────────────────────────────────────── */}
       <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="page-title">Sarif Operators</h1>
-          <p className="page-subtitle">{operators.length} Sarif Operator accounts</p>
+          <h1 className="page-title">Operators</h1>
+          <p className="page-subtitle">Manage all operator accounts</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Create Sarif Operator</button>
+        <button className="btn btn-primary" onClick={openCreate}>
+          + {isGeesh ? 'Create Sarif Operator' : 'Create Operator'}
+        </button>
       </div>
 
+      {/* ── Tab Switcher ─────────────────────────────────────── */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 'var(--space-4)', borderBottom: '2px solid var(--border-subtle)' }}>
+        <button
+          onClick={() => setActiveTab('shube')}
+          style={{
+            padding: 'var(--space-3) var(--space-5)',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'shube' ? '2px solid var(--brand-primary)' : '2px solid transparent',
+            marginBottom: -2,
+            color: activeTab === 'shube' ? 'var(--brand-primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'shube' ? 700 : 400,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          📱 Operator App
+          <span style={{
+            background: activeTab === 'shube' ? 'var(--brand-primary)' : 'var(--bg-surface-2)',
+            color: activeTab === 'shube' ? '#fff' : 'var(--text-muted)',
+            borderRadius: 99,
+            padding: '1px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+          }}>{shubCount}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('geesh')}
+          style={{
+            padding: 'var(--space-3) var(--space-5)',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'geesh' ? '2px solid var(--brand-success)' : '2px solid transparent',
+            marginBottom: -2,
+            color: activeTab === 'geesh' ? 'var(--brand-success)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'geesh' ? 700 : 400,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          💱 Sarif Operator
+          <span style={{
+            background: activeTab === 'geesh' ? 'var(--brand-success)' : 'var(--bg-surface-2)',
+            color: activeTab === 'geesh' ? '#fff' : 'var(--text-muted)',
+            borderRadius: 99,
+            padding: '1px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+          }}>{geeshCount}</span>
+        </button>
+      </div>
+
+      {/* ── Tab Description ──────────────────────────────────── */}
+      <div style={{
+        padding: 'var(--space-3) var(--space-4)',
+        background: isGeesh ? 'rgba(16,185,129,0.07)' : 'rgba(99,102,241,0.07)',
+        border: `1px solid ${isGeesh ? 'rgba(16,185,129,0.2)' : 'rgba(99,102,241,0.2)'}`,
+        borderRadius: 'var(--radius-md)',
+        fontSize: '0.85rem',
+        color: 'var(--text-secondary)',
+        marginBottom: 'var(--space-4)',
+      }}>
+        {isGeesh ? (
+          <>
+            <strong style={{ color: 'var(--brand-success)' }}>💱 Sarif Operator</strong>
+            {' '}— Accountiyadan waxaa isticmaala <strong>Geesh App</strong>-ka. Halkan ayaa laga sameeyo xisaabaadkooda.
+          </>
+        ) : (
+          <>
+            <strong style={{ color: 'var(--brand-primary)' }}>📱 Operator App</strong>
+            {' '}— Accountiyadan waxaa isticmaala <strong>Shube Android App</strong>-ka si ay lacag u xawilaan.
+          </>
+        )}
+      </div>
+
+      {/* ── Operators Table ──────────────────────────────────── */}
       <div className="card">
         <div className="card-header">
           <div className="search-bar">
             <span className="search-icon">🔍</span>
-            <input className="search-input" placeholder="Search operators..." value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              className="search-input"
+              placeholder={`Search ${isGeesh ? 'Sarif Operators' : 'Operators'}...`}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
           </div>
         </div>
         <div className="table-wrapper" style={{ borderRadius: 0, border: 'none' }}>
@@ -274,13 +370,23 @@ export default function OperatorsPage() {
             </thead>
             <tbody>
               {loading ? (
-                Array(5).fill(0).map((_, i) => <tr key={i}>{Array(6).fill(0).map((_, j) => <td key={j}><div className="skeleton" style={{ height: 14, width: 80 }} /></td>)}</tr>)
+                Array(5).fill(0).map((_, i) => (
+                  <tr key={i}>{Array(6).fill(0).map((_, j) => (
+                    <td key={j}><div className="skeleton" style={{ height: 14, width: 80 }} /></td>
+                  ))}</tr>
+                ))
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={6}>
                   <div className="empty-state">
-                    <div className="empty-icon">👤</div>
-                    <div className="empty-title">No Sarif Operators yet</div>
-                    <div className="empty-desc">Create your first Sarif Operator account to get started.</div>
+                    <div className="empty-icon">{isGeesh ? '💱' : '📱'}</div>
+                    <div className="empty-title">
+                      {isGeesh ? 'No Sarif Operators yet' : 'No Operators yet'}
+                    </div>
+                    <div className="empty-desc">
+                      {isGeesh
+                        ? 'Create a Sarif Operator account to give access to Geesh App.'
+                        : 'Create an Operator account to give access to Shube Android App.'}
+                    </div>
                   </div>
                 </td></tr>
               ) : filtered.map(op => (
@@ -298,7 +404,10 @@ export default function OperatorsPage() {
                     <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => openEdit(op)}>Edit</button>
                       <button className="btn btn-secondary btn-sm" onClick={() => { setShowResetModal(op); setNewPassword('') }}>Reset PW</button>
-                      <button className={`btn btn-sm ${op.profile?.status === 'active' ? 'btn-danger' : 'btn-success'}`} onClick={() => toggleStatus(op)}>
+                      <button
+                        className={`btn btn-sm ${op.profile?.status === 'active' ? 'btn-danger' : 'btn-success'}`}
+                        onClick={() => toggleStatus(op)}
+                      >
                         {op.profile?.status === 'active' ? 'Disable' : 'Enable'}
                       </button>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDeleteOperator(op)}>Delete</button>
@@ -311,15 +420,31 @@ export default function OperatorsPage() {
         </div>
       </div>
 
-      {/* Create/Edit Modal */}
+      {/* ── Create / Edit Modal ──────────────────────────────── */}
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <div className="modal-title">{editing ? 'Edit Operator' : 'Create Operator'}</div>
+              <div className="modal-title">
+                {editing
+                  ? `Edit ${isGeesh ? 'Sarif Operator' : 'Operator'}`
+                  : `Create ${isGeesh ? 'Sarif Operator' : 'Operator'}`}
+              </div>
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <div className="modal-body">
+              {/* App type badge */}
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px',
+                background: isGeesh ? 'rgba(16,185,129,0.12)' : 'rgba(99,102,241,0.12)',
+                color: isGeesh ? 'var(--brand-success)' : 'var(--brand-primary)',
+                borderRadius: 99, fontSize: '0.8rem', fontWeight: 600,
+                marginBottom: 'var(--space-4)',
+              }}>
+                {isGeesh ? '💱 Sarif Operator (Geesh App)' : '📱 Operator App (Shube)'}
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Full Name *</label>
                 <input className="form-input" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Ahmed Ali" />
@@ -330,6 +455,10 @@ export default function OperatorsPage() {
               </div>
               {!editing && (
                 <>
+                  <div className="form-group">
+                    <label className="form-label">Email <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — auto-generated if empty)</span></label>
+                    <input className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder={`username@${isGeesh ? 'geesh' : 'shube'}.app`} />
+                  </div>
                   <div className="form-group">
                     <label className="form-label">Temporary Password *</label>
                     <input type="password" className="form-input" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 8 characters" />
@@ -346,43 +475,35 @@ export default function OperatorsPage() {
                 <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." style={{ minHeight: 70 }} />
               </div>
 
-              <div style={{ padding: 'var(--space-3)', background: 'var(--bg-surface-2)', borderRadius: 'var(--radius-md)', marginTop: 'var(--space-3)' }}>
-                <h4 style={{ fontSize: '0.9rem', marginBottom: 'var(--space-3)' }}>Habaynta USSD (USSD Configuration)</h4>
-                
-                <div className="form-group">
-                  <label className="form-label">USSD Template</label>
-                  <input className="form-input" value={form.ussd_template} onChange={e => setForm(f => ({ ...f, ussd_template: e.target.value }))} placeholder="*806*0633920307*{lacag}*2050#" />
-                  <span className="form-hint">Isticmaal <code>{'{lacag}'}</code> meesha ay lacagtu ka galayso. Tusaale: <code>*806*0633920307*{'{lacag}'}*2050#</code></span>
+              {/* USSD Config removed as per user request */}
+              {/* Geesh note */}
+              {isGeesh && (
+                <div style={{
+                  marginTop: 'var(--space-3)',
+                  padding: 'var(--space-3)',
+                  background: 'rgba(16,185,129,0.07)',
+                  border: '1px solid rgba(16,185,129,0.2)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: '0.82rem',
+                  color: 'var(--text-secondary)',
+                }}>
+                  💡 Sarif Operator accountigan waxaa lagu gali doonaa <strong>Geesh App</strong>-ka. Xisaabtan ka dib isticmaaluhu waxa uu gali doonaa app-ka adeegsanaya username-ka iyo password-ka aad sameysay.
                 </div>
-
-                <div className="form-group">
-                  <label className="form-label">USSD Reply Template</label>
-                  <input className="form-input" value={form.ussd_reply_template} onChange={e => setForm(f => ({ ...f, ussd_reply_template: e.target.value }))} placeholder="Waxaad u xawishay {lacag}" />
-                  <span className="form-hint">Fariinta uu USSD soo celinayo ee la rajaynayo. Isticmaal <code>{'{lacag}'}</code></span>
-                </div>
-
-                <div style={{ marginTop: 'var(--space-3)', padding: 'var(--space-2) var(--space-3)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
-                  <strong>Preview (Tusaale ahaan haddii lacagtu tahay $5):</strong>
-                  <div style={{ marginTop: 4, fontFamily: 'monospace', color: 'var(--brand-primary)' }}>
-                    Dial: {form.ussd_template ? form.ussd_template.replace('{lacag}', '5') : '*806*0633920307*5*2050#'}
-                  </div>
-                  <div style={{ marginTop: 2, fontFamily: 'monospace', color: 'var(--brand-success)' }}>
-                    Reply: {form.ussd_reply_template ? form.ussd_reply_template.replace('{lacag}', '5') : 'Waxaad u xawishay 5'}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
               <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-                {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Saving...</> : editing ? 'Save Changes' : 'Create Operator'}
+                {saving
+                  ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Saving...</>
+                  : editing ? 'Save Changes' : `Create ${isGeesh ? 'Sarif Operator' : 'Operator'}`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Reset Password Modal */}
+      {/* ── Reset Password Modal ─────────────────────────────── */}
       {showResetModal && (
         <div className="modal-backdrop" onClick={() => setShowResetModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
