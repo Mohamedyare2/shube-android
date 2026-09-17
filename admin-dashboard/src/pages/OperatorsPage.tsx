@@ -72,8 +72,14 @@ export default function OperatorsPage() {
   }
 
   async function handleSave() {
-    if (!form.full_name || !form.username) {
-      toast('Full name and username are required', 'error'); return
+    if (activeTab === 'geesh') {
+      if (!form.full_name || !form.username) {
+        toast('Full name and username are required', 'error'); return
+      }
+    } else {
+      if (!form.email && !form.username) {
+        toast('Email is required', 'error'); return
+      }
     }
     setSaving(true)
     try {
