@@ -445,19 +445,23 @@ export default function OperatorsPage() {
                 {isGeesh ? '💱 Sarif Operator (Geesh App)' : '📱 Operator App (Shube)'}
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Full Name *</label>
-                <input className="form-input" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Ahmed Ali" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Username *</label>
-                <input className="form-input" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="ahmed01" />
-              </div>
+              {isGeesh && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Full Name *</label>
+                    <input className="form-input" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Ahmed Ali" />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Username *</label>
+                    <input className="form-input" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="ahmed01" />
+                  </div>
+                </>
+              )}
               {!editing && (
                 <>
                   <div className="form-group">
-                    <label className="form-label">Email <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — auto-generated if empty)</span></label>
-                    <input className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder={`username@${isGeesh ? 'geesh' : 'shube'}.app`} />
+                    <label className="form-label">Email {isGeesh ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — auto-generated if empty)</span> : '*'}</label>
+                    <input className="form-input" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder={`operator@${isGeesh ? 'geesh' : 'shube'}.app`} />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Temporary Password *</label>
@@ -470,10 +474,12 @@ export default function OperatorsPage() {
                 <label className="form-label">Phone Number</label>
                 <input className="form-input" value={form.phone_number} onChange={e => setForm(f => ({ ...f, phone_number: e.target.value }))} placeholder="0634xxxxxx" />
               </div>
-              <div className="form-group">
-                <label className="form-label">Notes</label>
-                <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." style={{ minHeight: 70 }} />
-              </div>
+              {isGeesh && (
+                <div className="form-group">
+                  <label className="form-label">Notes</label>
+                  <textarea className="form-textarea" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes..." style={{ minHeight: 70 }} />
+                </div>
+              )}
 
               {/* USSD Config removed as per user request */}
               {/* Geesh note */}

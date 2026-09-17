@@ -30,10 +30,15 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     let { email, password, full_name, username, phone_number, notes, actor_id, app_type, ussd_template, ussd_reply_template } = req.body || {};
     
-    if (!email && username) {
-      if (app_type === 'shube') {
-        email = `${username}@shube.app`;
-      } else {
+    if (app_type === 'shube') {
+      if (email && !username) {
+        username = email.split('@')[0];
+      }
+      if (email && !full_name) {
+        full_name = username;
+      }
+    } else {
+      if (!email && username) {
         email = `${username}@geesh.app`;
       }
     }
