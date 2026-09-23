@@ -46,9 +46,9 @@ export default function BundlesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     let q = supabase.from('bundle_rules').select('*').order('sort_order').order('amount_sls')
-    // Scope operator to their own bundles
+    // Scope operator to their own bundles OR global bundles
     if (isOperator && user?.id) {
-      q = q.eq('created_by', user.id)
+      q = q.or(`created_by.eq.${user.id},created_by.is.null`)
     }
     const { data } = await q
     if (data) setBundles(data)
