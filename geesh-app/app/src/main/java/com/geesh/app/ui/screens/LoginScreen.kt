@@ -153,46 +153,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             ) {
                 Column(modifier = Modifier.padding(22.dp)) {
 
-                    // Server URL toggle row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "SERVER CONFIG",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF64748B),
-                            letterSpacing = 1.sp
-                        )
-                        IconButton(
-                            onClick = { showUrlEdit = !showUrlEdit },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Rounded.Edit, contentDescription = null, tint = GeeshBlue, modifier = Modifier.size(14.dp))
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    AnimatedVisibility(visible = showUrlEdit) {
-                        OutlinedTextField(
-                            value = serverUrl,
-                            onValueChange = { serverUrl = it },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            label = { Text("Server URL") },
-                            placeholder = { Text("https://admin.shube.so") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GeeshBlue, unfocusedBorderColor = GeeshBorder,
-                                focusedLabelColor = GeeshBlue, unfocusedLabelColor = Color(0xFF94A3B8),
-                                cursorColor = GeeshBlue, focusedTextColor = Color.White, unfocusedTextColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
 
                     // ── Username ─────────────────────────────────────
                     OutlinedTextField(
