@@ -42,18 +42,36 @@ export default function BundlesPage() {
   const [ussdPin, setUssdPin] = useState('00000')
   const [isManualTemplate, setIsManualTemplate] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [operatorFilter, setOperatorFilter] = useState<string>('all')
+  const [operatorOptions, setOperatorOptions] = useState<{ id: string; name: string }[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    let q = supabase.from('bundle_rules').select('*').order('sort_order').order('amount_sls')
-    // Scope operator to their own bundles OR global bundles
+    let q = supabase
+      .from('bundle_rules')
+      .select('*, creator:profiles(full_name)')
+      .order('sort_order')
+      .order('amount_sls')
+
+    // Scope operator strictly to their own bundles
     if (isOperator && user?.id) {
-      q = q.or(`created_by.eq.${user.id},created_by.is.null`)
+      q = q.eq('created_by', user.id)
     }
     const { data } = await q
-    if (data) setBundles(data)
+    if (data) {
+      setBundles(data as BundleRule[])
+      if (isAdmin) {
+        const opsMap = new Map<string, string>()
+        ;(data as BundleRule[]).forEach(b => {
+          if (b.created_by && b.creator?.full_name) {
+            opsMap.set(b.created_by, b.creator.full_name)
+          }
+        })
+        setOperatorOptions(Array.from(opsMap.entries()).map(([id, name]) => ({ id, name })))
+      }
+    }
     setLoading(false)
-  }, [isOperator, user?.id])
+  }, [isOperator, user?.id, isAdmin])
 
   useEffect(() => { load() }, [load])
 
@@ -261,14 +279,36 @@ export default function BundlesPage() {
   const formProfit = calcProfit(formAmtSls, formCost)
   const formRevenue = formAmtSls * EXCHANGE_RATE
 
+  const displayedBundles = bundles.filter(b => {
+    if (isAdmin && operatorFilter !== 'all') {
+      return b.created_by === operatorFilter
+    }
+    return true
+  })
+
   return (
     <div className="page-container">
-      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
         <div>
           <h1 className="page-title">Bundle Rules</h1>
           <p className="page-subtitle">Configure amount → internet bundle → USSD code mappings</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          {isAdmin && operatorOptions.length > 0 && (
+            <select
+              className="form-select"
+              style={{ width: 'auto', minWidth: 200 }}
+              value={operatorFilter}
+              onChange={e => setOperatorFilter(e.target.value)}
+            >
+              <option value="all">Dhammaan Operators-ka</option>
+              {operatorOptions.map(op => (
+                <option key={op.id} value={op.id}>{op.name}</option>
+              ))}
+            </select>
+          )}
+          <button className="btn btn-primary" onClick={openCreate}>+ Add Bundle</button>
+        </div>
       </div>
 
       {/* Info box */}
@@ -278,16 +318,16 @@ export default function BundlesPage() {
       </div>
 
       {/* Summary cards */}
-      {!loading && bundles.length > 0 && (() => {
-        const activeBundles = bundles.filter(b => b.active)
-        const bundlesWithCost = bundles.filter(b => b.cost_price != null)
+      {!loading && displayedBundles.length > 0 && (() => {
+        const activeBundles = displayedBundles.filter(b => b.active)
+        const bundlesWithCost = displayedBundles.filter(b => b.cost_price != null)
         const totalRevenue = bundlesWithCost.reduce((s, b) => s + b.amount_sls * EXCHANGE_RATE, 0)
         const totalCost    = bundlesWithCost.reduce((s, b) => s + (b.cost_price ?? 0), 0)
         const avgProfit    = bundlesWithCost.length ? (totalRevenue - totalCost) / bundlesWithCost.length : null
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
             {[
-              { label: 'Total Bundles', value: bundles.length, color: 'var(--brand-primary)' },
+              { label: 'Total Bundles', value: displayedBundles.length, color: 'var(--brand-primary)' },
               { label: 'Active', value: activeBundles.length, color: 'var(--brand-success)' },
               { label: 'Priced Bundles', value: bundlesWithCost.length, color: 'var(--brand-accent)' },
               { label: 'Avg Profit/Bundle', value: avgProfit != null ? `$${avgProfit.toFixed(4)}` : '—', color: avgProfit != null && avgProfit > 0 ? 'var(--brand-success)' : 'var(--brand-danger)' },
@@ -306,6 +346,7 @@ export default function BundlesPage() {
           <table>
             <thead>
               <tr>
+                {isAdmin && <th>Operator</th>}
                 <th>Amount (SLS)</th>
                 <th>Bundle Name</th>
                 <th>Data</th>
@@ -322,21 +363,28 @@ export default function BundlesPage() {
             </thead>
             <tbody>
               {loading ? (
-                Array(4).fill(0).map((_, i) => <tr key={i}>{Array(12).fill(0).map((_, j) => <td key={j}><div className="skeleton" style={{ height: 14, width: 60 }} /></td>)}</tr>)
-              ) : bundles.length === 0 ? (
-                <tr><td colSpan={12}>
+                Array(4).fill(0).map((_, i) => <tr key={i}>{Array(isAdmin ? 13 : 12).fill(0).map((_, j) => <td key={j}><div className="skeleton" style={{ height: 14, width: 60 }} /></td>)}</tr>)
+              ) : displayedBundles.length === 0 ? (
+                <tr><td colSpan={isAdmin ? 13 : 12}>
                   <div className="empty-state">
                     <div className="empty-icon">📦</div>
                     <div className="empty-title">No bundle rules configured</div>
-                    <div className="empty-desc">Add at least one bundle rule to enable automatic recharge.</div>
+                    <div className="empty-desc">{isOperator ? 'Adigu wali ma aadan samaysan wax bundle ah. Guji "+ Add Bundle" si aad u bilowdo.' : 'Add at least one bundle rule to enable automatic recharge.'}</div>
                   </div>
                 </td></tr>
-              ) : bundles.map(b => {
+              ) : displayedBundles.map(b => {
                 const revenue = b.amount_sls * EXCHANGE_RATE
                 const profit  = calcProfit(b.amount_sls, b.cost_price)
                 const profitColor = profit == null ? 'var(--text-muted)' : profit > 0 ? 'var(--brand-success)' : 'var(--brand-danger)'
                 return (
                   <tr key={b.id}>
+                    {isAdmin && (
+                      <td>
+                        <span className="badge" style={{ background: 'rgba(59,130,246,0.12)', color: 'var(--brand-primary)', fontSize: '0.75rem', fontWeight: 600 }}>
+                          {b.creator?.full_name || 'System / Template'}
+                        </span>
+                      </td>
+                    )}
                     <td style={{ fontWeight: 700, fontSize: '1rem' }}>{formatSLS(b.amount_sls)}</td>
                     <td style={{ fontWeight: 600 }}>{b.bundle_name}</td>
                     <td>
