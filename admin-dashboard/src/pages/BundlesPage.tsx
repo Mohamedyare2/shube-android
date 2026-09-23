@@ -45,10 +45,15 @@ export default function BundlesPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('bundle_rules').select('*').order('sort_order').order('amount_sls')
+    let q = supabase.from('bundle_rules').select('*').order('sort_order').order('amount_sls')
+    // Scope operator to their own bundles
+    if (isOperator && user?.id) {
+      q = q.eq('created_by', user.id)
+    }
+    const { data } = await q
     if (data) setBundles(data)
     setLoading(false)
-  }, [])
+  }, [isOperator, user?.id])
 
   useEffect(() => { load() }, [load])
 
@@ -204,7 +209,10 @@ export default function BundlesPage() {
         if (error) throw error
         toast('Bundle rule updated', 'success')
       } else {
-        const { error } = await supabase.from('bundle_rules').insert(payload)
+        const { error } = await supabase.from('bundle_rules').insert({
+          ...payload,
+          created_by: user?.id,
+        })
         if (error) {
           if (error.code === '23505') throw new Error('A bundle with this amount already exists.')
           throw error
