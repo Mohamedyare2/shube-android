@@ -21,7 +21,7 @@ function calcProfit(amountSls: number, costPrice: number | null) {
 
 export default function BundlesPage() {
   const { toast } = useToast()
-  const { isAdmin } = useAuth()
+  const { isAdmin, isOperator, user } = useAuth()
   const [bundles, setBundles] = useState<BundleRule[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
