@@ -47,7 +47,8 @@ class GeeshSmsReceiver : BroadcastReceiver() {
             // Start the processing service
             val serviceIntent = Intent(context, GeeshForegroundService::class.java).apply {
                 action = GeeshForegroundService.ACTION_PROCESS_SMS
-                putExtra("amount",   parsed.amountDollar)
+                putExtra("amount", parsed.amountDollar)
+                putExtra("amount_formatted", parsed.amountFormatted)
                 putExtra("tixraac", parsed.tixraac ?: "")
                 putExtra("sms_body", body)
             }

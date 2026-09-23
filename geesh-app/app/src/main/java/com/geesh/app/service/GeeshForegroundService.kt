@@ -80,10 +80,12 @@ class GeeshForegroundService : Service() {
                 else startForeground(NOTIFICATION_ID, buildNotification("Geesh", "Fariin cusub la helay..."))
 
                 val amount  = intent.getDoubleExtra("amount", 0.0)
+                // Fallback: replace . with * if missing from intent
+                val amountFormatted = intent.getStringExtra("amount_formatted") ?: amount.toString().removeSuffix(".0").replace(".", "*")
                 val tixraac = intent.getStringExtra("tixraac") ?: ""
                 val smsBody = intent.getStringExtra("sms_body") ?: ""
 
-                scope.launch { processPayment(amount, tixraac, smsBody) }
+                scope.launch { processPayment(amount, amountFormatted, tixraac, smsBody) }
             }
         }
         return START_STICKY
@@ -91,11 +93,11 @@ class GeeshForegroundService : Service() {
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    private suspend fun processPayment(amount: Double, tixraac: String, smsBody: String) {
+    private suspend fun processPayment(amount: Double, amountFormatted: String, tixraac: String, smsBody: String) {
         val db  = GeeshDatabase.getInstance(this)
         val dao = db.transactionDao()
 
-        Log.d("GeeshService", "Processing payment: \$$amount, tixraac=$tixraac")
+        Log.d("GeeshService", "Processing payment: \$$amount (formatted: $amountFormatted), tixraac=$tixraac")
 
         // ── Duplicate check ───────────────────────────────────────────────────
         if (tixraac.isNotEmpty()) {
@@ -149,14 +151,11 @@ class GeeshForegroundService : Service() {
             //   *806*{lacag}#                    (no number, no pin)
             val template = prefs.ussdTemplate?.takeIf { it.isNotBlank() } ?: DEFAULT_TEMPLATE
 
-            // Amount is already the integer part from the parser
-            val amountStr = amount.toInt().toString()
-
             val ussdCode = template
-                .replace("{lacag}", amountStr)
-                .replace("{amount}", amountStr)
+                .replace("{lacag}", amountFormatted)
+                .replace("{amount}", amountFormatted)
 
-            Log.d("GeeshService", "Dialing USSD: $ussdCode  (template=$template, amount=$amountStr)")
+            Log.d("GeeshService", "Dialing USSD: $ussdCode  (template=$template, amountFormatted=$amountFormatted)")
             notify("Geesh 📞", "Diray: $ussdCode")
 
             // ── Optional single reply ─────────────────────────────────────────
