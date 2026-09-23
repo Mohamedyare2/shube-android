@@ -31,6 +31,8 @@ try {
 
 const SUPABASE_URL      = (process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+// Anon key is used for user-facing auth (operator login via password flow)
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || SERVICE_ROLE_KEY;
 const PORT              = parseInt(process.env.PORT || "5050", 10);
 const CORS_ORIGINS      = (process.env.CORS_ORIGINS || "http://localhost:5173,http://localhost:4173").split(",");
 
@@ -852,8 +854,8 @@ app.post("/api/geesh/login", async (req, res) => {
     
     const userId = authData.user.id;
 
-    // 2. Find Operator ID
-    const opResp = await sbFetch(`${SUPABASE_URL}/rest/v1/operators?profile_id=eq.${userId}&select=id,username`, { method: "GET" });
+    // 2. Find Operator ID + USSD templates
+    const opResp = await sbFetch(`${SUPABASE_URL}/rest/v1/operators?profile_id=eq.${userId}&select=id,username,ussd_template,ussd_reply_template`, { method: "GET" });
     const opData = await opResp.json();
     if (!opResp.ok || opData.length === 0) return res.status(403).json({ error: "Operator not found" });
     

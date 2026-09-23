@@ -14,14 +14,31 @@ class LocalPrefs(context: Context) {
         get() = prefs.getString("username", null)
         set(value) = prefs.edit().putString("username", value).apply()
 
+    /**
+     * USSD Template — stored from server on login.
+     * Format: *806*{number}*{lacag}*{pin}#
+     * All parts except *806* and {lacag} are optional.
+     * Examples:
+     *   *806*{number}*{lacag}*{pin}#       (full)
+     *   *806*{number}*{lacag}#             (no pin)
+     *   *806*{lacag}#                      (no number, no pin)
+     */
     var ussdTemplate: String?
         get() = prefs.getString("ussd_template", null)
         set(value) = prefs.edit().putString("ussd_template", value).apply()
 
+    /**
+     * Optional single reply to send after the USSD dialog appears.
+     * If null or empty — no reply is sent (user entered nothing on server).
+     */
+    var ussdReply: String?
+        get() = prefs.getString("ussd_reply", null)
+        set(value) = prefs.edit().putString("ussd_reply", value).apply()
+
     var baseUrl: String
-        get() = prefs.getString("base_url", "http://10.0.2.2:3000") ?: "http://10.0.2.2:3000"
+        get() = prefs.getString("base_url", "https://admin.shube.so") ?: "https://admin.shube.so"
         set(value) = prefs.edit().putString("base_url", value).apply()
-        
+
     fun clear() {
         prefs.edit().clear().apply()
     }

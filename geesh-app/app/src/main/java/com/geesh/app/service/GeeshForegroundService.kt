@@ -11,6 +11,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.geesh.app.local.GeeshDatabase
+import com.geesh.app.local.LocalPrefs
 import com.geesh.app.local.ProcessedTransaction
 import com.geesh.app.ussd.GeeshAccessibilityService
 import kotlinx.coroutines.*
@@ -18,11 +19,13 @@ import kotlinx.coroutines.flow.first
 
 /**
  * Foreground service that:
- *  1. Receives a parsed SMS (amount + tixraac) from SmsBroadcastReceiver
+ *  1. Receives a parsed SMS (hadhaag/amount + tixraac) from SmsBroadcastReceiver
  *  2. Checks local Room DB to prevent duplicate processing
- *  3. Dials *806*0633920307*{amount}*2050#
- *  4. Waits for the PIN dialog via GeeshAccessibilityService
- *  5. Injects PIN "3495" and records the result
+ *  3. Builds USSD code from flexible template: *806*{number}*{lacag}*{pin}#
+ *     - {number}, {pin}, and reply are all optional (user configures on server)
+ *     - Amount used is the INTEGER part only (e.g. $4.3 -> 4)
+ *  4. Waits for the USSD dialog via GeeshAccessibilityService
+ *  5. Optionally injects a reply and records the result
  */
 class GeeshForegroundService : Service() {
 
@@ -37,10 +40,21 @@ class GeeshForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID      = "geesh_service_channel"
 
-        // PIN to enter after the USSD dialog appears (Could also be from preferences)
-        private const val USSD_PIN = "3495"
         // Timeout waiting for accessibility dialog (ms)
         private const val DIALOG_TIMEOUT_MS = 30_000L
+
+        /**
+         * Default template when none is set by the server.
+         * Placeholders:
+         *   {lacag}  — integer amount (REQUIRED, always replaced)
+         *   {number} — optional recipient number
+         *   {pin}    — optional PIN
+         * Server can provide any combination, e.g.:
+         *   *806*{number}*{lacag}*{pin}#
+         *   *806*{number}*{lacag}#
+         *   *806*{lacag}#
+         */
+        private const val DEFAULT_TEMPLATE = "*806*{lacag}#"
     }
 
     override fun onCreate() {
@@ -108,7 +122,7 @@ class GeeshForegroundService : Service() {
 
         // ── Check Accessibility Service ───────────────────────────────────────
         if (!GeeshAccessibilityService.isServiceActive) {
-            Log.e("GeeshService", "Accessibility service is NOT active. Cannot enter PIN automatically.")
+            Log.e("GeeshService", "Accessibility service is NOT active. Cannot enter reply automatically.")
             notify("⚠️ Geesh", "Accessibility Service ma shaqaynayso! Fur Settings si aad u shiddo.")
             dao.updateResult(record.tixraac, "failed_accessibility")
             return
@@ -116,23 +130,44 @@ class GeeshForegroundService : Service() {
 
         // ── Acquire WakeLock ──────────────────────────────────────────────────
         val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-        val wl = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Geesh::USSD")
+        @Suppress("DEPRECATION")
+        val wl = pm?.newWakeLock(
+            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+            android.os.PowerManager.ON_AFTER_RELEASE,
+            "Geesh::USSD"
+        )
         wl?.acquire(120_000L) // 2 min safety
 
         try {
-            // ── Build USSD code ───────────────────────────────────────────────
-            val prefs = com.geesh.app.local.LocalPrefs(this)
-            val ussdTemplate = prefs.ussdTemplate ?: "*806*0633920307*{lacag}*2050#"
-            
-            // Format amount as integer if it has no fractional part
-            val amountStr = if (amount == Math.floor(amount)) amount.toInt().toString()
-                            else amount.toString()
-            val ussdCode = ussdTemplate.replace("{amount}", amountStr).replace("{lacag}", amountStr)
-            Log.d("GeeshService", "Dialing USSD: $ussdCode")
+            val prefs = LocalPrefs(this)
+
+            // ── Build USSD code from flexible template ────────────────────────
+            // Template examples (all set by admin on the server):
+            //   *806*{number}*{lacag}*{pin}#    (number + pin both present)
+            //   *806*{number}*{lacag}#           (no pin)
+            //   *806*{lacag}#                    (no number, no pin)
+            val template = prefs.ussdTemplate?.takeIf { it.isNotBlank() } ?: DEFAULT_TEMPLATE
+
+            // Amount is already the integer part from the parser
+            val amountStr = amount.toInt().toString()
+
+            val ussdCode = template
+                .replace("{lacag}", amountStr)
+                .replace("{amount}", amountStr)
+
+            Log.d("GeeshService", "Dialing USSD: $ussdCode  (template=$template, amount=$amountStr)")
             notify("Geesh 📞", "Diray: $ussdCode")
 
-            // Set next reply BEFORE dialing so the service is ready when dialog appears
-            GeeshAccessibilityService.nextReply = USSD_PIN
+            // ── Optional single reply ─────────────────────────────────────────
+            val ussdReply = prefs.ussdReply?.takeIf { it.isNotBlank() }
+            if (ussdReply != null) {
+                GeeshAccessibilityService.nextReply = ussdReply
+                Log.d("GeeshService", "Reply will be sent: $ussdReply")
+            } else {
+                GeeshAccessibilityService.nextReply = null
+                Log.d("GeeshService", "No reply configured — USSD only")
+            }
 
             // ── Dial ─────────────────────────────────────────────────────────
             dialUssd(ussdCode)

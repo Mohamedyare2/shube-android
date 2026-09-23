@@ -282,6 +282,12 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         if (operator.has("ussd_template") && !operator.isNull("ussd_template")) {
                                             prefs.ussdTemplate = operator.getString("ussd_template")
                                         }
+                                        // Save optional reply (single step reply after USSD dial)
+                                        if (operator.has("ussd_reply_template") && !operator.isNull("ussd_reply_template")) {
+                                            prefs.ussdReply = operator.getString("ussd_reply_template")
+                                        } else {
+                                            prefs.ussdReply = null
+                                        }
                                         
                                         onLoginSuccess()
                                     },

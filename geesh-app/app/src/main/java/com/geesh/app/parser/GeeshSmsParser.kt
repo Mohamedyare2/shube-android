@@ -15,17 +15,29 @@ data class ParsedGeeshSms(
  * Parses incoming SMS from sender "898" to extract dollar amount and Tixraac.
  *
  * Expected format (Somali):
- *   [‑[‑ADEEGA SARIFKA‑]‑]
+ *   [-[-ADEEGA SARIFKA-]-]
  *   Tixraac: 15727885435,
  *   Waxaad $2 u sariftay SLSH22,000CABDIRAXIIN DAHIR MAXAMUUD(252636859785).
  *
+ *   OR balance message:
+ *   [-ADEEGA SARIFKA-]
+ *   Waxaad $3 ku shubtey bank account-kaaga: 644XXX41, Hadhaagaaga waa $0.89.
+ *
  * Key extraction rules:
- *  - Amount: the number immediately after the "$" sign
+ *  - Amount: reads "Hadhaagaaga waa $X" first (remaining balance).
+ *            Falls back to the first "$X" in SMS if Hadhaaga not found.
+ *            Only the INTEGER part is used: $4.3 -> 4, $0.89 -> 0
  *  - Tixraac: the number after "Tixraac:" label
  */
 class GeeshSmsParser {
 
-    // Matches "$5" or "$2.50" etc. — captures just the numeric part
+    // Matches "Hadhaagaaga waa $0.89" — captures the numeric part after "$"
+    private val hadhaagaPattern = Pattern.compile(
+        """Hadhaagaaga\s+waa\s+\$([0-9]+(?:\.[0-9]+)?)""",
+        Pattern.CASE_INSENSITIVE
+    )
+
+    // Fallback: Matches "$5" or "$2.50" — captures just the numeric part
     private val amountPattern = Pattern.compile(
         """\$([0-9]+(?:\.[0-9]+)?)""",
         Pattern.CASE_INSENSITIVE
@@ -38,19 +50,35 @@ class GeeshSmsParser {
     )
 
     fun parse(body: String): ParsedGeeshSms? {
-        val amountMatcher = amountPattern.matcher(body)
-        if (!amountMatcher.find()) {
-            Log.d("GeeshParser", "No dollar amount found in SMS body")
-            return null
+        // 1. Try to read Hadhaagaaga (remaining balance) first
+        val hadhaagaMatcher = hadhaagaPattern.matcher(body)
+        val amountRaw: Double?
+
+        if (hadhaagaMatcher.find()) {
+            val str = hadhaagaMatcher.group(1) ?: return null
+            amountRaw = str.toDoubleOrNull()
+            Log.d("GeeshParser", "Hadhaaga found: \$$amountRaw")
+        } else {
+            // 2. Fall back to first "$X" in the message
+            val amountMatcher = amountPattern.matcher(body)
+            if (!amountMatcher.find()) {
+                Log.d("GeeshParser", "No dollar amount found in SMS body")
+                return null
+            }
+            val str = amountMatcher.group(1) ?: return null
+            amountRaw = str.toDoubleOrNull()
+            Log.d("GeeshParser", "Fallback amount found: \$$amountRaw")
         }
 
-        val amountStr = amountMatcher.group(1) ?: return null
-        val amount = amountStr.toDoubleOrNull() ?: return null
+        if (amountRaw == null) return null
+
+        // Integer part only: $4.3 -> 4, $0.89 -> 0
+        val amount = Math.floor(amountRaw)
 
         val tixraacMatcher = tixraacPattern.matcher(body)
         val tixraac = if (tixraacMatcher.find()) tixraacMatcher.group(1) else null
 
-        Log.d("GeeshParser", "Parsed: amount=\$$amount, tixraac=$tixraac")
+        Log.d("GeeshParser", "Final: amount=\$$amount (raw=\$$amountRaw), tixraac=$tixraac")
         return ParsedGeeshSms(amountDollar = amount, tixraac = tixraac)
     }
 }
