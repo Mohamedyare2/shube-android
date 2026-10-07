@@ -12,8 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,20 +50,16 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
     var savedOk by remember { mutableStateOf(false) }
 
     var accessibilityActive by remember { mutableStateOf(GeeshAccessibilityService.isServiceActive) }
-    var recentTxns by remember { mutableStateOf<List<ProcessedTransaction>>(emptyList()) }
 
-    // Refresh every 3 seconds
+    // Refresh accessibility state every 3 seconds
     LaunchedEffect(Unit) {
         while (true) {
             accessibilityActive = GeeshAccessibilityService.isServiceActive
-            val db = GeeshDatabase.getInstance(context)
-            recentTxns = db.transactionDao().getRecent()
             delay(3000)
         }
     }
 
     val purple = Color(0xFF7C3AED)
-    val green  = Color(0xFF10B981)
     val bgGrad = Brush.verticalGradient(listOf(Color(0xFF0F0A1E), Color(0xFF1A1035)))
 
     Box(Modifier.fillMaxSize().background(bgGrad)) {
@@ -90,7 +84,7 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Geesh App", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("Lacag Sarifka Automatic", fontSize = 13.sp, color = Color.White.copy(alpha = 0.45f))
+                    Text("Lacag dire Automatic ah", fontSize = 13.sp, color = Color.White.copy(alpha = 0.45f))
                     Text("User: @$username", fontSize = 12.sp, color = purple, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
                 }
             }
@@ -194,61 +188,6 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                 context.startActivity(
                     Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
                 )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            // Start / Stop buttons
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    modifier = Modifier.weight(1f),
-                    colors   = ButtonDefaults.buttonColors(containerColor = green),
-                    onClick  = {
-                        context.startForegroundService(Intent(context, GeeshForegroundService::class.java).apply {
-                            action = GeeshForegroundService.ACTION_START_SERVICE
-                        })
-                    }
-                ) {
-                    Icon(Icons.Default.PlayArrow, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Bilow")
-                }
-                Button(
-                    modifier = Modifier.weight(1f),
-                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-                    onClick  = {
-                        context.startService(Intent(context, GeeshForegroundService::class.java).apply {
-                            action = GeeshForegroundService.ACTION_STOP_SERVICE
-                        })
-                    }
-                ) {
-                    Icon(Icons.Default.Stop, null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Jooji")
-                }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // Recent transactions header
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Macaamiladii Dambe", fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
-                Surface(color = purple.copy(alpha = 0.25f), shape = RoundedCornerShape(8.dp)) {
-                    Text(" ${recentTxns.size} ", color = purple, fontWeight = FontWeight.Bold, fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            if (recentTxns.isEmpty()) {
-                Box(Modifier.fillMaxWidth().padding(vertical = 30.dp), contentAlignment = Alignment.Center) {
-                    Text("Macaamiil ma jiraan weli", color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp)
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    recentTxns.forEach { tx -> TxRow(tx) }
-                }
             }
 
             Spacer(Modifier.height(24.dp))
