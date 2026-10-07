@@ -155,6 +155,29 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
 
 
 
+                    // ── Server URL ─────────────────────────────────────
+                    AnimatedVisibility(visible = showUrlEdit) {
+                        Column {
+                            OutlinedTextField(
+                                value = serverUrl,
+                                onValueChange = { serverUrl = it; errorMessage = null },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Server URL") },
+                                placeholder = { Text("https://...") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                                leadingIcon = { Text("🌍", fontSize = 16.sp) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = GeeshBlue, unfocusedBorderColor = GeeshBorder,
+                                    focusedLabelColor = GeeshBlue, unfocusedLabelColor = Color(0xFF94A3B8),
+                                    cursorColor = GeeshBlue, focusedTextColor = Color.White, unfocusedTextColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                    }
+
                     // ── Username ─────────────────────────────────────
                     OutlinedTextField(
                         value = username,
@@ -277,6 +300,15 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         } else {
                             Text("GAL (LOGIN)", fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TextButton(
+                        onClick = { showUrlEdit = !showUrlEdit },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showUrlEdit) "Qari Server URL" else "Bedel Server-ka", color = GeeshBlue)
                     }
                 }
             }
