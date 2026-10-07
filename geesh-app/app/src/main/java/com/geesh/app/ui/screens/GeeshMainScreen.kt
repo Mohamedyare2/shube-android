@@ -2,6 +2,7 @@ package com.geesh.app.ui.screens
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -23,9 +24,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.geesh.app.local.GeeshDatabase
+import com.geesh.app.local.LocalPrefs
 import com.geesh.app.local.ProcessedTransaction
 import com.geesh.app.service.GeeshForegroundService
 import com.geesh.app.ussd.GeeshAccessibilityService
@@ -36,9 +43,13 @@ import java.util.*
 @Composable
 fun GeeshMainScreen(onLogout: () -> Unit = {}) {
     val context = LocalContext.current
-    val prefs = remember { com.geesh.app.local.LocalPrefs(context) }
-    val ussdTemplate = prefs.ussdTemplate ?: "*806*0633920307*{lacag}*2050#"
+    val prefs = remember { LocalPrefs(context) }
     val username = prefs.username ?: "Unknown"
+
+    // Editable state — pre-filled from LocalPrefs (saved on last login or last edit)
+    var ussdInput by remember { mutableStateOf(prefs.ussdTemplate ?: "") }
+    var replyInput by remember { mutableStateOf(prefs.ussdReply ?: "") }
+    var savedOk by remember { mutableStateOf(false) }
 
     var accessibilityActive by remember { mutableStateOf(GeeshAccessibilityService.isServiceActive) }
     var recentTxns by remember { mutableStateOf<List<ProcessedTransaction>>(emptyList()) }
@@ -59,7 +70,10 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
 
     Box(Modifier.fillMaxSize().background(bgGrad)) {
         Column(
-            Modifier.fillMaxSize().padding(20.dp),
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(36.dp))
@@ -91,6 +105,89 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
             }
 
             Spacer(Modifier.height(24.dp))
+
+            // ── USSD Config Card ──────────────────────────────────────────────
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color    = purple.copy(alpha = 0.12f),
+                shape    = RoundedCornerShape(16.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                    Text(
+                        "⚙️ Habeynta USSD",
+                        fontWeight = FontWeight.Bold,
+                        color      = Color.White,
+                        fontSize   = 15.sp
+                    )
+
+                    // USSD Code field
+                    OutlinedTextField(
+                        value         = ussdInput,
+                        onValueChange = { ussdInput = it; savedOk = false },
+                        modifier      = Modifier.fillMaxWidth(),
+                        label         = { Text("USSD code-ka app-ku si toos ah u wacayo", fontSize = 12.sp) },
+                        placeholder   = { Text("*806*0634123456*{lacag}*2050#", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
+                        singleLine    = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = purple,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                            focusedLabelColor    = purple,
+                            unfocusedLabelColor  = Color.White.copy(alpha = 0.5f),
+                            cursorColor          = purple,
+                            focusedTextColor     = Color.White,
+                            unfocusedTextColor   = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Reply message field
+                    OutlinedTextField(
+                        value         = replyInput,
+                        onValueChange = { replyInput = it; savedOk = false },
+                        modifier      = Modifier.fillMaxWidth(),
+                        label         = { Text("Jawaabta la dirayo (reply message)", fontSize = 12.sp) },
+                        placeholder   = { Text("Tusaale: 1   (ama waa iska daaya haddaad rabto)", fontSize = 11.sp) },
+                        singleLine    = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor   = purple,
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                            focusedLabelColor    = purple,
+                            unfocusedLabelColor  = Color.White.copy(alpha = 0.5f),
+                            cursorColor          = purple,
+                            focusedTextColor     = Color.White,
+                            unfocusedTextColor   = Color.White
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Save button
+                    Button(
+                        onClick = {
+                            prefs.ussdTemplate = ussdInput.trim().ifBlank { null }
+                            prefs.ussdReply    = replyInput.trim().ifBlank { null }
+                            savedOk = true
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors   = ButtonDefaults.buttonColors(containerColor = purple),
+                        shape    = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(if (savedOk) "✅ La keydiyay!" else "💾 Keydi (Save)", fontWeight = FontWeight.Bold)
+                    }
+
+                    // Helper hint
+                    Text(
+                        "💡 Isticmaal {lacag} halka lacagta lagu gelin doono. Haddaad reply-ga meesha ka reebto, app-ku USSD-ka kaliya ayuu wacdaa.",
+                        fontSize = 11.sp,
+                        color    = Color.White.copy(alpha = 0.45f),
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
 
             // Accessibility status card
             AccessibilityCard(accessibilityActive) {
@@ -131,21 +228,6 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            // Info box
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color    = purple.copy(alpha = 0.1f),
-                shape    = RoundedCornerShape(12.dp)
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    InfoLine("👤", "Operator", "@$username")
-                    InfoLine("📡", "Sender", "898")
-                    InfoLine("📞", "USSD", ussdTemplate)
-                }
-            }
-
             Spacer(Modifier.height(20.dp))
 
             // Recent transactions header
@@ -164,10 +246,12 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                     Text("Macaamiil ma jiraan weli", color = Color.White.copy(alpha = 0.3f), fontSize = 14.sp)
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(recentTxns) { tx -> TxRow(tx) }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    recentTxns.forEach { tx -> TxRow(tx) }
                 }
             }
+
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
