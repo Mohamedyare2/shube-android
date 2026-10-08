@@ -2,6 +2,9 @@ package com.geesh.app.ussd
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -121,19 +124,55 @@ class GeeshAccessibilityService : AccessibilityService() {
         return sb.toString()
     }
 
+    /**
+     * Enters [text] (the user's PIN) into the USSD reply dialog and presses Send.
+     *
+     * Strategy (most-to-least reliable on real devices):
+     *  1. Find the EditText → focus it → copy [text] to clipboard → paste
+     *  2. If paste didn't populate the field, fall back to ACTION_SET_TEXT
+     *  3. Click SEND / OK button
+     */
     private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
+        // ── 1. Find the input field ──────────────────────────────────────────
         val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
         val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
 
-        if (target != null) {
+        if (target == null) {
+            Log.e("GeeshAccessibility", "No EditText found in USSD dialog — cannot enter PIN")
+            return false
+        }
+
+        // ── 2. Focus the field ───────────────────────────────────────────────
+        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        delay(300)
+
+        // ── 3. Copy PIN to clipboard ─────────────────────────────────────────
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("pin", text))
+        Log.d("GeeshAccessibility", "PIN copied to clipboard: $text")
+        delay(200)
+
+        // ── 4. Paste into field ──────────────────────────────────────────────
+        val pasted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        Log.d("GeeshAccessibility", "Paste action result: $pasted")
+        delay(300)
+
+        // ── 5. Fallback: if paste didn't work, use ACTION_SET_TEXT ───────────
+        val currentText = target.text?.toString() ?: ""
+        if (currentText.isBlank()) {
+            Log.d("GeeshAccessibility", "Paste didn't populate field — trying ACTION_SET_TEXT")
             val bundle = android.os.Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
             target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-            delay(500)
-            return clickButton(node, listOf("SEND", "OK", "REPLY"))
+            delay(300)
         }
-        return false
+
+        // ── 6. Click SEND ────────────────────────────────────────────────────
+        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply"))
+        Log.d("GeeshAccessibility", "Send button clicked: $sent")
+        return sent
     }
 
     private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
