@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
 
 export default function LoginPage() {
   const { signIn, session } = useAuth()
@@ -32,6 +32,11 @@ export default function LoginPage() {
       <div className="login-grid" />
 
       <div className="login-card-glass">
+        {/* Back to home */}
+        <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-muted)', fontSize: '0.8rem', textDecoration: 'none', marginBottom: '1rem' }}>
+          ← Back to Home
+        </Link>
+
         {/* Brand */}
         <div className="login-logo">
           <div className="login-logo-icon">

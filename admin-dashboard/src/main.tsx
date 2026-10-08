@@ -4,9 +4,19 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import AppLayout from './layouts/AppLayout'
+import PublicLayout from './layouts/PublicLayout'
 
-// Pages
+// Public pages
+import HomePage from './pages/public/HomePage'
+import AboutPage from './pages/public/AboutPage'
+import PublicDownloadsPage from './pages/public/PublicDownloadsPage'
+import ContactPage from './pages/public/ContactPage'
+import PrivacyPage from './pages/public/PrivacyPage'
+
+// Auth pages
 import LoginPage from './pages/LoginPage'
+
+// Protected pages
 import DashboardPage from './pages/DashboardPage'
 import OperatorsPage from './pages/OperatorsPage'
 import CustomersPage from './pages/CustomersPage'
@@ -38,23 +48,36 @@ createRoot(document.getElementById('root')!).render(
       <ToastProvider>
         <AuthProvider>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            
-            <Route path="/" element={<AppLayout />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="transactions" element={<TransactionsPage />} />
-              <Route path="operators" element={<OperatorsPage />} />
-              <Route path="devices" element={<DevicesPage />} />
-              <Route path="customers" element={<CustomersPage />} />
-              <Route path="bundles" element={<BundlesPage />} />
-              <Route path="ussd-config" element={<UssdConfigPage />} />
-              <Route path="sms-parser" element={<SmsParserPage />} />
-              <Route path="reports" element={<ReportsPage />} />
-              <Route path="audit-logs" element={<AuditLogsPage />} />
-              <Route path="download" element={<DownloadPage />} />
-              <Route path="settings" element={<Placeholder title="Settings" />} />
+            {/* ── Public routes (no auth required) ─────────── */}
+            <Route element={<PublicLayout />}>
+              <Route path="/"          element={<HomePage />} />
+              <Route path="/about"     element={<AboutPage />} />
+              <Route path="/downloads" element={<PublicDownloadsPage />} />
+              <Route path="/contact"   element={<ContactPage />} />
+              <Route path="/privacy"   element={<PrivacyPage />} />
             </Route>
+
+            {/* ── Auth ──────────────────────────────────────── */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* ── Protected dashboard routes ────────────────── */}
+            <Route element={<AppLayout />}>
+              <Route path="/dashboard"   element={<DashboardPage />} />
+              <Route path="/transactions" element={<TransactionsPage />} />
+              <Route path="/operators"   element={<OperatorsPage />} />
+              <Route path="/devices"     element={<DevicesPage />} />
+              <Route path="/customers"   element={<CustomersPage />} />
+              <Route path="/bundles"     element={<BundlesPage />} />
+              <Route path="/ussd-config" element={<UssdConfigPage />} />
+              <Route path="/sms-parser"  element={<SmsParserPage />} />
+              <Route path="/reports"     element={<ReportsPage />} />
+              <Route path="/audit-logs"  element={<AuditLogsPage />} />
+              <Route path="/download"    element={<DownloadPage />} />
+              <Route path="/settings"    element={<Placeholder title="Settings" />} />
+            </Route>
+
+            {/* ── 404 fallback ──────────────────────────────── */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </AuthProvider>
       </ToastProvider>
