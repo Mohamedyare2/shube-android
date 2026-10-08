@@ -46,13 +46,14 @@ CREATE INDEX IF NOT EXISTS idx_operators_username    ON public.operators(usernam
 CREATE TABLE IF NOT EXISTS public.customers (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_name   TEXT        NOT NULL,
-    telesom_number  TEXT        NOT NULL UNIQUE,
+    telesom_number  TEXT        NOT NULL,
     somtel_number   TEXT        NOT NULL,
     active          BOOLEAN     NOT NULL DEFAULT TRUE,
     notes           TEXT,
     created_by      UUID        REFERENCES public.profiles(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(created_by, telesom_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_customers_telesom_number ON public.customers(telesom_number);

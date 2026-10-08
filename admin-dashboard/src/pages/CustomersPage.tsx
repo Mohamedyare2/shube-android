@@ -88,7 +88,7 @@ export default function CustomersPage() {
           created_by:     user?.id,
         })
         if (error) {
-          if (error.code === '23505') throw new Error('A customer with this Telesom number already exists.')
+          if (error.code === '23505') throw new Error('A customer with this Telesom number already exists in your list.')
           throw error
         }
         await supabase.from('audit_logs').insert({ actor_id: user?.id, actor_role: isOperator ? 'operator' : 'admin', action: 'customer_added', resource_type: 'customer', description: `Added ${form.customer_name} (${form.telesom_number})` })

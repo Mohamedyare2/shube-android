@@ -70,10 +70,11 @@ CREATE POLICY "customers_admin_all"
     TO authenticated
     USING (public.current_user_role() = 'admin');
 
-CREATE POLICY "customers_operator_read"
-    ON public.customers FOR SELECT
+CREATE POLICY "customers_operator_all"
+    ON public.customers FOR ALL
     TO authenticated
-    USING (public.current_user_role() = 'operator' AND active = TRUE);
+    USING (public.current_user_role() = 'operator' AND created_by = auth.uid())
+    WITH CHECK (public.current_user_role() = 'operator' AND created_by = auth.uid());
 
 -- ============================================================
 -- BUNDLE RULES (admin full, operators read active only)
