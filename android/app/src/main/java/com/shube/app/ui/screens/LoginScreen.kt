@@ -299,6 +299,7 @@ fun LoginScreen(
                                 if (result.success && result.deviceId != null) {
                                     prefs.deviceId   = result.deviceId
                                     prefs.operatorId = result.operatorId
+                                    prefs.profileId  = result.profileId  // auth.uid — used for bundle_rules.created_by
                                     // Save service key and init Supabase service client
                                     result.supabaseServiceKey?.let { key ->
                                         prefs.supabaseServiceKey = key

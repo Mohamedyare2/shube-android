@@ -28,12 +28,23 @@ export default async function handler(req, res) {
       body: JSON.stringify({ device_identifier: real_identifier, status: 'online', last_seen: new Date().toISOString() }),
     });
 
+    // Fetch the operator's profile_id (= auth.uid = used in bundle_rules.created_by)
+    let profile_id = null;
+    try {
+      const opResp = await sbFetch(`${SUPABASE_URL}/rest/v1/operators?id=eq.${device.operator_id}&select=profile_id&limit=1`);
+      const opRows = await opResp.json();
+      if (Array.isArray(opRows) && opRows.length > 0) {
+        profile_id = opRows[0].profile_id;
+      }
+    } catch (_) {}
+
     // Return supabase_token so the Android app can authenticate with Supabase
     // and pass RLS policies when inserting transactions
     return jsonResponse(res, 200, {
       success: true,
       device_id: device.id,
       operator_id: device.operator_id,
+      profile_id: profile_id,         // Used by Android to filter bundle_rules by created_by
       supabase_url: SUPABASE_URL,
       supabase_anon_key: process.env.SUPABASE_ANON_KEY || '',
       supabase_service_key: SUPABASE_SERVICE_ROLE_KEY,

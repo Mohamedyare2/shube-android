@@ -24,13 +24,14 @@ object SupabaseRepository {
      * Finds the active bundle rule matching the given SLS amount exactly.
      * Returns the first match, or null if no matching rule exists.
      */
-    suspend fun getBundleByAmount(amountSls: Double): BundleRule? = withContext(Dispatchers.IO) {
+    suspend fun getBundleByAmount(amountSls: Double, operatorId: String): BundleRule? = withContext(Dispatchers.IO) {
         try {
             val result = client.postgrest["bundle_rules"]
                 .select {
                     filter {
                         eq("active", true)
                         eq("amount_sls", amountSls)
+                        eq("created_by", operatorId)   // Only this operator's own rules
                     }
                     limit(1)
                 }

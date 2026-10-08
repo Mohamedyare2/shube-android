@@ -21,11 +21,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class GatewayForegroundService : Service() {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    
+    // Mutex to ensure USSD transactions are processed sequentially
+    private val ussdMutex = Mutex()
 
     companion object {
         const val ACTION_PROCESS_SMS  = "com.shube.app.action.PROCESS_SMS"
@@ -79,7 +84,9 @@ class GatewayForegroundService : Service() {
                 val testMode = intent.getBooleanExtra("test_mode", false)
 
                 scope.launch {
-                    processTransactionAsync(smsHash, sender, amount, txId, body, testMode)
+                    ussdMutex.withLock {
+                        processTransactionAsync(smsHash, sender, amount, txId, body, testMode)
+                    }
                 }
             }
         }
@@ -117,7 +124,8 @@ class GatewayForegroundService : Service() {
             Log.e("GatewayService", "No device ID — aborting")
             return
         }
-        val operatorId = prefs.operatorId ?: run {
+        val operatorId = prefs.operatorId
+        val profileId  = prefs.profileId ?: operatorId  // profile UUID for bundle_rules.created_by lookup ?: run {
             Log.e("GatewayService", "No operator ID — aborting")
             return
         }
@@ -126,7 +134,13 @@ class GatewayForegroundService : Service() {
 
         // ── Acquire WakeLock so CPU never sleeps during USSD/transaction ──────
         val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-        val wakeLock = powerManager?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "Shube::TransactionProcessing")
+        @Suppress("DEPRECATION")
+        val wakeLock = powerManager?.newWakeLock(
+            android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or 
+            android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or 
+            android.os.PowerManager.ON_AFTER_RELEASE, 
+            "Shube::TransactionProcessing"
+        )
         wakeLock?.acquire(180_000L) // 3 mins safety timeout
 
         try {
@@ -141,7 +155,7 @@ class GatewayForegroundService : Service() {
 
         // ── Step 2: Find bundle rule matching the amount ─────────
         notify("Matching Bundle", "Looking up $amount SLS bundle rule...")
-        val bundle = SupabaseRepository.getBundleByAmount(amount)
+        val bundle = SupabaseRepository.getBundleByAmount(amount, profileId)
         if (bundle == null) {
             Log.w("GatewayService", "Amount $amount SLS does not match any bundle rule. Assuming it's a normal transfer. Ignoring.")
             // Completely ignore, no transaction created for non-bundle payments

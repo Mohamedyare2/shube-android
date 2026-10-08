@@ -17,7 +17,8 @@ data class BundleRule(
     @SerialName("ussd_option") val ussdOption: String,
     @SerialName("ussd_code") val ussdCode: String,
     @SerialName("ussd_replies") val ussdReplies: List<String> = emptyList(),
-    val active: Boolean = true
+    val active: Boolean = true,
+    @SerialName("created_by") val createdBy: String? = null
 )
 
 /**

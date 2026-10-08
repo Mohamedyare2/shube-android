@@ -20,6 +20,11 @@ class DevicePreferences(context: Context) {
         get() = prefs.getString(KEY_OPERATOR_ID, null)
         set(value) = prefs.edit().putString(KEY_OPERATOR_ID, value).apply()
 
+    /** Profile UUID (= auth.uid) – used to filter bundle_rules by created_by */
+    var profileId: String?
+        get() = prefs.getString(KEY_PROFILE_ID, null)
+        set(value) = prefs.edit().putString(KEY_PROFILE_ID, value).apply()
+
     var serverUrl: String
         get() = prefs.getString(KEY_SERVER_URL, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
         set(value) = prefs.edit().putString(KEY_SERVER_URL, value.trimEnd('/')).apply()
@@ -39,6 +44,7 @@ class DevicePreferences(context: Context) {
         prefs.edit()
             .remove(KEY_DEVICE_ID)
             .remove(KEY_OPERATOR_ID)
+            .remove(KEY_PROFILE_ID)
             .remove(KEY_SUPABASE_SERVICE_KEY)
             .apply()
     }
@@ -46,6 +52,7 @@ class DevicePreferences(context: Context) {
     companion object {
         private const val KEY_DEVICE_ID          = "device_id"
         private const val KEY_OPERATOR_ID         = "operator_id"
+        private const val KEY_PROFILE_ID          = "profile_id"
         private const val KEY_SERVER_URL          = "server_url"
         private const val KEY_DEVICE_NAME         = "device_name"
         private const val KEY_SUPABASE_SERVICE_KEY = "supabase_service_key"

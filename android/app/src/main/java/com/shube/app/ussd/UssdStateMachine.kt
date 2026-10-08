@@ -117,7 +117,8 @@ class UssdStateMachine(private val context: Context) {
                     }
                     
                     "READ_RESPONSE" -> {
-                        // The previous step's reply resulted in this dialog text
+                        // Wait for the final outcome dialog to appear after the last reply was sent
+                        currentDialogText = waitForDialog(step.timeoutMs)
                         Log.d("UssdStateMachine", "Final response text: $currentDialogText")
                         
                         val defaultSuccessPatterns = listOf(

@@ -16,6 +16,7 @@ data class PairResult(
     val success: Boolean,
     val deviceId: String? = null,
     val operatorId: String? = null,
+    val profileId: String? = null,    // = auth.uid = used in bundle_rules.created_by
     val supabaseServiceKey: String? = null,
     val error: String? = null
 )
@@ -70,6 +71,7 @@ class ApiService(private val context: Context) {
                         success = json.optBoolean("success", false),
                         deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
                         operatorId = json.optString("operator_id").takeIf { it.isNotEmpty() },
+                        profileId = json.optString("profile_id").takeIf { it.isNotEmpty() },
                         supabaseServiceKey = json.optString("supabase_service_key").takeIf { it.isNotEmpty() }
                     )
                 } else {
