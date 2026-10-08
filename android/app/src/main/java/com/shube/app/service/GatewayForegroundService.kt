@@ -124,11 +124,11 @@ class GatewayForegroundService : Service() {
             Log.e("GatewayService", "No device ID — aborting")
             return
         }
-        val operatorId = prefs.operatorId
-        val profileId  = prefs.profileId ?: operatorId  // profile UUID for bundle_rules.created_by lookup ?: run {
-            Log.e("GatewayService", "No operator ID — aborting")
+        val operatorId = prefs.operatorId ?: run {
+            Log.e("GatewayService", "No operator ID - aborting")
             return
         }
+        val profileId  = prefs.profileId ?: operatorId
 
         Log.d("GatewayService", "Processing: amount=$amount SLS, sender=$sender")
 
@@ -304,3 +304,4 @@ class GatewayForegroundService : Service() {
         manager.createNotificationChannel(channel)
     }
 }
+
