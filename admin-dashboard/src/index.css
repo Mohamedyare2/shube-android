@@ -1705,21 +1705,15 @@ tr:hover td { background: var(--bg-surface-2); }
 
 /* ── Navbar ── */
 .pub-nav {
-  position: fixed;
+  position: relative;
   top: 0;
   left: 0;
   right: 0;
   z-index: 100;
   transition: all var(--transition-med);
-  background: transparent;
-  padding: var(--space-4) 0;
-}
-.pub-nav--scrolled {
-  background: rgba(10, 14, 23, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: var(--space-3) 0;
+  background: var(--bg-surface-2);
   border-bottom: 1px solid var(--border-default);
+  padding: var(--space-4) 0;
 }
 .pub-nav-inner {
   max-width: 1200px;
@@ -1901,7 +1895,6 @@ tr:hover td { background: var(--bg-surface-2); }
 /* ── Main Layout ── */
 .pub-main {
   flex: 1;
-  padding-top: 60px; /* offset for nav */
 }
 .pub-container {
   max-width: 1200px;
