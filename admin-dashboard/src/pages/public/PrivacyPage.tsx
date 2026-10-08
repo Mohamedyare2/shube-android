@@ -81,7 +81,7 @@ export default function PrivacyPage() {
           <ul>
             <li><strong>Supabase</strong> — Database and authentication (supabase.com)</li>
             <li><strong>Vercel</strong> — Web hosting for the dashboard (vercel.com)</li>
-            <li><strong>Hormuud / Somtel</strong> — Somalia mobile money networks (SMS interactions only, no data sharing)</li>
+            <li><strong>Hormuud / Somtel</strong> — Somaliland mobile money networks (SMS interactions only, no data sharing)</li>
           </ul>
 
           <h2>6. Permissions Used by the Apps</h2>

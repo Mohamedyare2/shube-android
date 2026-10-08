@@ -34,20 +34,20 @@ export default function AboutPage() {
           <div className="pub-about-grid">
             {/* Leader card */}
             <div className="pub-leader-card">
-              <div className="pub-leader-avatar">
-                <span>M</span>
+              <div className="pub-leader-avatar" style={{ padding: 0, overflow: 'hidden' }}>
+                <img src="/eng-mohamed.jpg" alt="Eng. Mohamed Sayid Mohamed" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
               <div className="pub-leader-badge">Founder & Lead Engineer</div>
               <h2 className="pub-leader-name">Eng. Mohamed Sayid Mohamed</h2>
               <p className="pub-leader-desc">
-                Mohamed is a software engineer and entrepreneur based in Somalia with a passion for
+                Mohamed is a software engineer and entrepreneur based in Somaliland with a passion for
                 building practical digital solutions that solve real-world business problems.
                 He founded Salaam Solution with the mission of bringing modern technology to
-                Somali businesses.
+                Somaliland businesses.
               </p>
               <div className="pub-leader-contact">
                 <a href="mailto:msayid@proton.me" className="pub-contact-pill">
-                  ✉ msayid@proton.me
+                  ✉️ msayid@proton.me
                 </a>
                 <a href="tel:+2520634284015" className="pub-contact-pill">
                   📞 063 4284015
@@ -60,7 +60,7 @@ export default function AboutPage() {
               <h2 className="pub-section-title">About Salaam Solution</h2>
               <p className="pub-section-desc">
                 Salaam Solution is a technology company focused on developing software products
-                and services tailored to the Somali market. We specialize in mobile automation,
+                and services tailored to the Somaliland market. We specialize in mobile automation,
                 web applications, and backend systems that help businesses operate more efficiently.
               </p>
               <p className="pub-section-desc">
@@ -121,7 +121,7 @@ export default function AboutPage() {
           <h2 className="pub-section-title pub-section-title--center">Software Development Services</h2>
           <p className="pub-section-desc pub-section-desc--center">
             In addition to our own products, Salaam Solution offers custom software development
-            services for businesses across Somalia.
+            services for businesses across Somaliland.
           </p>
           <div className="pub-services-grid">
             {services.map(s => (
