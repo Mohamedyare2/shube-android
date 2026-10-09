@@ -59,6 +59,41 @@ export interface Customer {
   updated_at: string
 }
 
+export type FeatureAccessStatus = 'active' | 'inactive' | 'suspended' | 'expired'
+
+export interface OperatorFeatureAccess {
+  id: string
+  operator_id: string
+  feature_key: string
+  status: FeatureAccessStatus
+  payment_reference: string | null
+  notes: string | null
+  granted_by: string | null
+  granted_at: string | null
+  expires_at: string | null
+  revoked_at: string | null
+  revoked_by: string | null
+  created_at: string
+  updated_at: string
+  // Joined
+  operator?: Operator
+  granter?: Profile
+}
+
+export interface OperatorFeatureHistory {
+  id: string
+  operator_id: string
+  feature_key: string
+  action: 'granted' | 'revoked' | 'suspended' | 'expired' | 'updated'
+  previous_status: FeatureAccessStatus | null
+  new_status: FeatureAccessStatus
+  payment_reference: string | null
+  reason: string | null
+  performed_by: string | null
+  created_at: string
+  performer?: Profile
+}
+
 export interface BundleRule {
   id: string
   amount_sls: number

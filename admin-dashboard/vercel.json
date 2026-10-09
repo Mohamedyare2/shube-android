@@ -3,6 +3,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/register/:code",
+      "destination": "/api/register.js?code=:code"
+    },
+    {
+      "source": "/api/register",
+      "destination": "/api/register.js"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

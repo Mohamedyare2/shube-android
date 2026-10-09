@@ -2,6 +2,8 @@ import React from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+import { supabase } from '../lib/supabase'
+
 interface NavItem {
   path: string
   icon: string
@@ -11,19 +13,20 @@ interface NavItem {
 }
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
-  { section: 'Overview',     path: '/dashboard',     icon: '📊', label: 'Global Dashboard' },
+  { section: 'Overview',     path: '/dashboard',        icon: '📊', label: 'Global Dashboard' },
   { path: '/transactions',   icon: '💳', label: 'All Transactions' },
-  { section: 'Management',   path: '/operators',     icon: '🧑‍💼', label: 'Sarif Operators' },
+  { section: 'Management',   path: '/operators',        icon: '🧑‍💼', label: 'Sarif Operators' },
+  { path: '/premium-features', icon: '⭐', label: 'Premium Features' },
   { path: '/devices',        icon: '📱', label: 'All Devices' },
   { path: '/customers',      icon: '👥', label: 'Customers' },
   { path: '/referral-link',  icon: '🔗', label: 'Registration Link' },
   { path: '/bundles',        icon: '📦', label: 'Bundle Rules' },
-  { section: 'Configuration',path: '/ussd-config',   icon: '⚙️', label: 'USSD Config' },
+  { section: 'Configuration',path: '/ussd-config',      icon: '⚙️', label: 'USSD Config' },
   { path: '/sms-parser',     icon: '📩', label: 'SMS Parser' },
-  { section: 'Reporting',    path: '/reports',       icon: '📈', label: 'Reports' },
+  { section: 'Reporting',    path: '/reports',          icon: '📈', label: 'Reports' },
   { path: '/audit-logs',     icon: '📋', label: 'Audit Logs' },
   { path: '/settings',       icon: '🔧', label: 'Settings' },
-  { section: 'Downloads',    path: '/download',      icon: '📥', label: 'Downloads' },
+  { section: 'Downloads',    path: '/download',         icon: '📥', label: 'Downloads' },
 ]
 
 const OPERATOR_NAV_ITEMS: NavItem[] = [
@@ -46,9 +49,35 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
-  const { profile, isAdmin, signOut } = useAuth()
+  const { profile, user, isAdmin, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [hasReferralAccess, setHasReferralAccess] = React.useState(false)
+
+  // Check operator premium entitlement for registration_via_link
+  React.useEffect(() => {
+    if (isAdmin) {
+      setHasReferralAccess(true)
+      return
+    }
+    if (!user?.id) return
+
+    // Query RLS-safe entitlement
+    supabase
+      .from('operator_feature_access')
+      .select('status, expires_at')
+      .eq('feature_key', 'registration_via_link')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data && data.status === 'active') {
+          const valid = !data.expires_at || new Date(data.expires_at).getTime() > Date.now()
+          setHasReferralAccess(valid)
+        } else {
+          setHasReferralAccess(false)
+        }
+      })
+      .catch(() => setHasReferralAccess(false))
+  }, [user?.id, isAdmin])
 
   // Close sidebar on navigation (mobile)
   React.useEffect(() => {
@@ -68,7 +97,14 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     .slice(0, 2)
     .toUpperCase() ?? (isAdmin ? 'AD' : 'OP')
 
-  const navItems = isAdmin ? ADMIN_NAV_ITEMS : OPERATOR_NAV_ITEMS
+  const baseItems = isAdmin ? ADMIN_NAV_ITEMS : OPERATOR_NAV_ITEMS
+  // Hide referral link from operators who are not authorized
+  const navItems = baseItems.filter(item => {
+    if (item.path === '/referral-link' && !isAdmin && !hasReferralAccess) {
+      return false
+    }
+    return true
+  })
   const roleLabel = isAdmin ? 'Admin' : 'Operator'
 
   return (

@@ -6,10 +6,16 @@ interface OperatorInfo {
   welcome_message: string | null
 }
 
+interface LoadErrorState {
+  code: string
+  title: string
+  message: string
+}
+
 export default function ReferralPage() {
   const { code } = useParams<{ code: string }>()
   const [operator, setOperator] = useState<OperatorInfo | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<LoadErrorState | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [telesom, setTelesom] = useState('')
@@ -21,16 +27,73 @@ export default function ReferralPage() {
   const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   useEffect(() => {
-    if (!code) return
-    fetch(`${BASE_URL}/api/register/${code}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) { setLoadError(data.error); setLoading(false); return }
-        setOperator({ username: data.username, welcome_message: data.welcome_message })
+    if (!code) {
+      setLoadError({
+        code: 'MISSING_CODE',
+        title: 'Link Lama Helin',
+        message: 'Fadlan hubi link-ga aad isticmaashay inuu sax yahay.',
+      })
+      setLoading(false)
+      return
+    }
+
+    const cleanCode = code.trim().toLowerCase()
+    const endpoint = `${BASE_URL}/api/register?code=${encodeURIComponent(cleanCode)}`
+
+    fetch(endpoint)
+      .then(async res => {
+        let data: Record<string, unknown> | null = null
+        try {
+          data = await res.json()
+        } catch {
+          data = null
+        }
+
+        if (res.status === 404) {
+          setLoadError({
+            code: 'NOT_FOUND',
+            title: 'Link Not Found (Lama Helin)',
+            message: (data?.message as string) || 'Link-gan diiwaangelinta lama helin. Fadlan hubi tixraaca aad heshay.',
+          })
+          setLoading(false)
+          return
+        }
+
+        if (res.status === 403) {
+          setLoadError({
+            code: 'INACTIVE',
+            title: 'Adeeggan Hadda Ma Shaqaynayo',
+            message: (data?.message as string) || 'Adeegga diiwaangelinta link-ga ee operator-kani hadda ma furna ama waqtigiisii ayaa dhacay. Fadlan la xiriir operator-ka ama maamulaha.',
+          })
+          setLoading(false)
+          return
+        }
+
+        if (!res.ok || !data) {
+          setLoadError({
+            code: 'SERVER_ERROR',
+            title: 'Khalad Ayaa Dhacay',
+            message: (data?.message as string) || 'Server-ka laguma xirmi karo hadda. Fadlan dib u tijaabi daqiiqado yar kaddib.',
+          })
+          setLoading(false)
+          return
+        }
+
+        setOperator({
+          username: (data.username as string) || cleanCode,
+          welcome_message: (data.welcome_message as string) || null,
+        })
         setLoading(false)
       })
-      .catch(() => { setLoadError('Unable to load this registration link.'); setLoading(false) })
-  }, [code])
+      .catch(() => {
+        setLoadError({
+          code: 'NETWORK_ERROR',
+          title: 'Xiriirka Ayaa Go\'an',
+          message: 'Fadlan hubi khadkaaga internetka, kaddibna dib u cusboonaysii (Refresh) bogga.',
+        })
+        setLoading(false)
+      })
+  }, [code, BASE_URL])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,24 +102,40 @@ export default function ReferralPage() {
     const tNum = telesom.replace(/\D/g, '')
     const sNum = somtel.replace(/\D/g, '')
 
-    if (tNum.length !== 9) { setFormError('Numberka Telesom waa inuu ahaadaa 9 nambar (Ha ku darin 0 hore)'); return }
-    if (sNum.length !== 9) { setFormError('Numberka Somtel waa inuu ahaadaa 9 nambar'); return }
+    if (tNum.length !== 9) {
+      setFormError('Numberka Telesom (lacagta) waa inuu ahaadaa 9 nambar. Ha ku darin 0 hore (Tusaale: 634284015).')
+      return
+    }
+    if (sNum.length !== 9) {
+      setFormError('Numberka Somtel (data-da) waa inuu ahaadaa 9 nambar. (Tusaale: 657575175).')
+      return
+    }
 
     setSubmitting(true)
+    const cleanCode = (code || '').trim().toLowerCase()
+    const endpoint = `${BASE_URL}/api/register?code=${encodeURIComponent(cleanCode)}`
+
     try {
-      const res = await fetch(`${BASE_URL}/api/register/${code}`, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ telesom_number: tNum, somtel_number: sNum }),
       })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        setFormError(data.error || 'Diiwaan gelinta way fashilantay. Dib u isku day.')
+
+      let data: Record<string, unknown> | null = null
+      try {
+        data = await res.json()
+      } catch {
+        data = null
+      }
+
+      if (!res.ok || !data || data.error) {
+        setFormError((data?.message as string) || (data?.error as string) || 'Diiwaan gelinta way fashilantay. Fadlan dib u isku day.')
       } else {
         setSuccess(true)
       }
     } catch {
-      setFormError('Xiriirka internetka ayaa dhacay. Dib u isku day.')
+      setFormError('Xiriirka internetka ayaa go\'ay intii la dirayay. Fadlan dib u isku day.')
     } finally {
       setSubmitting(false)
     }
@@ -67,19 +146,29 @@ export default function ReferralPage() {
       <div style={styles.page}>
         <div style={styles.card}>
           <div style={styles.spinner} />
-          <p style={{ color: '#6b7280', marginTop: 16 }}>Loading...</p>
+          <p style={{ color: '#6b7280', marginTop: 16 }}>Loading registration page...</p>
         </div>
       </div>
     )
   }
 
   if (loadError) {
+    const isInactive = loadError.code === 'INACTIVE'
     return (
       <div style={styles.page}>
-        <div style={styles.card}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-          <h2 style={{ color: '#ef4444', marginBottom: 8 }}>Link Not Found</h2>
-          <p style={{ color: '#6b7280' }}>{loadError}</p>
+        <div style={{ ...styles.card, marginTop: 40 }}>
+          <div style={{ fontSize: 52, marginBottom: 16 }}>{isInactive ? '⏸️' : '⚠️'}</div>
+          <h2 style={{ color: isInactive ? '#d97706' : '#ef4444', marginBottom: 12, fontSize: '1.4rem', fontWeight: 800 }}>
+            {loadError.title}
+          </h2>
+          <p style={{ color: '#4b5563', lineHeight: 1.7, fontSize: '0.95rem', marginBottom: 24 }}>
+            {loadError.message}
+          </p>
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
+            <a href="/" style={{ color: '#0ea5e9', textDecoration: 'none', fontWeight: 600, fontSize: '0.9rem' }}>
+              ← Ku noqo Bogga Hore (Back to Home)
+            </a>
+          </div>
         </div>
       </div>
     )
@@ -88,19 +177,22 @@ export default function ReferralPage() {
   if (success) {
     return (
       <div style={styles.page}>
-        <div style={{ ...styles.card, borderTop: '4px solid #10b981' }}>
+        <div style={{ ...styles.card, borderTop: '5px solid #10b981', marginTop: 40 }}>
           <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
-          <h2 style={{ color: '#10b981', fontSize: '1.5rem', fontWeight: 700, marginBottom: 12 }}>
+          <h2 style={{ color: '#10b981', fontSize: '1.5rem', fontWeight: 800, marginBottom: 12 }}>
             Diiwaan gelinta waa lagu guuleystay!
           </h2>
-          <p style={{ color: '#374151', lineHeight: 1.7, marginBottom: 8 }}>
-            Macluumaadkaaga si guul leh ayaa la helay.
-            Hadda waad sii wadi kartaa tallaabada xigta si aad u hesho xogta internetkaaga.
+          <p style={{ color: '#1f2937', lineHeight: 1.7, marginBottom: 12, fontWeight: 500 }}>
+            Macluumaadkaaga si guul leh ayaa la helay. Hadda waad sii wadi kartaa tallaabada xigta si aad u hesho xogta internetkaaga.
           </p>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-            Registration successful! Your information has been received.
-            You can now continue with the next steps to receive your data bundle.
-          </p>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '14px 18px', textAlign: 'left', marginBottom: 20 }}>
+            <div style={{ fontSize: '0.85rem', color: '#15803d', lineHeight: 1.6 }}>
+              <strong>Registration successful!</strong> Your information has been received. You can now continue with the next steps to receive your data bundle.
+            </div>
+          </div>
+          <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+            Attributed to operator: <strong>@{operator?.username}</strong>
+          </div>
         </div>
       </div>
     )
@@ -108,7 +200,7 @@ export default function ReferralPage() {
 
   return (
     <div style={styles.page}>
-      {/* Header */}
+      {/* Header Banner */}
       <div style={styles.header}>
         <div style={styles.logo}>S</div>
         <h1 style={styles.heroTitle}>Get High-Speed Internet in Seconds!</h1>
@@ -116,35 +208,42 @@ export default function ReferralPage() {
           {operator?.welcome_message ||
             'Ku raaxayso internet degdeg ah oo aad ku kalsoon tahay marka aad u baahato, oo ay xukunto codsiyadeena casriga ah. Buuxi foomka hoose oo ku bilow dhowr ilbiriqsi gudahood.'}
         </p>
-        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.875rem', marginTop: 8 }}>
-          Enjoy fast, reliable internet whenever you need it, powered by our modern application.
-          Complete the simple form below and get started in seconds.
+        <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.875rem', marginTop: 10, lineHeight: 1.5 }}>
+          Enjoy fast, reliable internet whenever you need it, powered by our modern application. Complete the simple form below and get started in seconds.
         </p>
       </div>
 
-      {/* How it works */}
+      {/* How it works strip */}
       <div style={styles.stepsRow}>
         {[
-          { icon: '📝', title: 'Register', desc: 'Enter your phone numbers' },
-          { icon: '💳', title: 'Send Payment', desc: 'Transfer via Telesom' },
-          { icon: '📶', title: 'Get Internet', desc: 'Data bundle delivered instantly' },
+          { icon: '📝', title: '1. Register', desc: 'Geli numberadaada' },
+          { icon: '💳', title: '2. Send Payment', desc: 'Ka dir Telesom/Zaad' },
+          { icon: '📶', title: '3. Receive Bundle', desc: 'Data-da ku hel Somtel' },
         ].map(s => (
           <div key={s.title} style={styles.step}>
-            <span style={{ fontSize: 28 }}>{s.icon}</span>
-            <strong style={{ display: 'block', marginTop: 8, color: '#1f2937' }}>{s.title}</strong>
-            <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{s.desc}</span>
+            <span style={{ fontSize: 26 }}>{s.icon}</span>
+            <strong style={{ display: 'block', marginTop: 6, color: '#1f2937', fontSize: '0.85rem' }}>{s.title}</strong>
+            <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{s.desc}</span>
           </div>
         ))}
       </div>
 
-      {/* Form */}
+      {/* Form Card */}
       <div style={styles.card}>
-        <h2 style={styles.formTitle}>Register Now</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #f3f4f6', paddingBottom: 12 }}>
+          <h2 style={styles.formTitle}>Foomka Diiwaangelinta</h2>
+          <span style={{ fontSize: '0.75rem', color: '#0ea5e9', background: '#f0f9ff', padding: '4px 8px', borderRadius: 6, fontWeight: 600 }}>
+            @{operator?.username}
+          </span>
+        </div>
+
         {formError && (
           <div style={styles.errorBox}>
-            <span>⚠️</span> {formError}
+            <span style={{ fontSize: 18 }}>⚠️</span>
+            <span>{formError}</span>
           </div>
         )}
+
         <form onSubmit={handleSubmit}>
           <div style={styles.field}>
             <label style={styles.label}>
@@ -190,17 +289,21 @@ export default function ReferralPage() {
             <span style={styles.hint}>9 nambar — Ha ku darin 0 hore (Tusaale: 657575175)</span>
           </div>
 
-          <button type="submit" disabled={submitting} style={{
-            ...styles.submitBtn,
-            opacity: submitting ? 0.7 : 1,
-            cursor: submitting ? 'not-allowed' : 'pointer',
-          }}>
-            {submitting ? '⏳ Processing...' : '🚀 Get Started'}
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              ...styles.submitBtn,
+              opacity: submitting ? 0.75 : 1,
+              cursor: submitting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {submitting ? '⏳ Fadlan sug (Processing)...' : '🚀 Get Started (Diiwaangeli)'}
           </button>
         </form>
       </div>
 
-      <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.75rem', marginTop: 24, paddingBottom: 32 }}>
+      <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.75rem', marginTop: 20, paddingBottom: 32 }}>
         Powered by <strong>Shube</strong> · Salaam Solution
       </p>
     </div>
@@ -222,34 +325,34 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 560,
     background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
     borderRadius: '0 0 24px 24px',
-    padding: '48px 32px 40px',
+    padding: '44px 28px 36px',
     textAlign: 'center',
     color: 'white',
-    marginBottom: 24,
-    boxShadow: '0 4px 24px rgba(14,165,233,0.3)',
+    marginBottom: 20,
+    boxShadow: '0 4px 24px rgba(14,165,233,0.25)',
   },
   logo: {
-    width: 56,
-    height: 56,
-    background: 'rgba(255,255,255,0.2)',
-    borderRadius: 16,
+    width: 52,
+    height: 52,
+    background: 'rgba(255,255,255,0.22)',
+    borderRadius: 14,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 800,
-    margin: '0 auto 16px',
+    margin: '0 auto 14px',
     backdropFilter: 'blur(4px)',
   },
   heroTitle: {
-    fontSize: 'clamp(1.4rem, 5vw, 1.9rem)',
+    fontSize: 'clamp(1.35rem, 5vw, 1.85rem)',
     fontWeight: 800,
-    margin: '0 0 12px',
-    lineHeight: 1.2,
+    margin: '0 0 10px',
+    lineHeight: 1.25,
   },
   heroDesc: {
-    fontSize: '1rem',
-    opacity: 0.9,
+    fontSize: '0.95rem',
+    opacity: 0.95,
     lineHeight: 1.6,
     margin: 0,
   },
@@ -258,84 +361,84 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 560,
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 12,
-    marginBottom: 24,
+    gap: 10,
+    marginBottom: 20,
   },
   step: {
     background: 'white',
-    borderRadius: 16,
-    padding: '16px 12px',
+    borderRadius: 14,
+    padding: '14px 10px',
     textAlign: 'center',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-    border: '1px solid rgba(0,0,0,0.05)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+    border: '1px solid rgba(0,0,0,0.04)',
   },
   card: {
     width: '100%',
     maxWidth: 560,
     background: 'white',
-    borderRadius: 24,
-    padding: '32px 28px',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-    border: '1px solid rgba(0,0,0,0.05)',
+    borderRadius: 20,
+    padding: '28px 24px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
+    border: '1px solid rgba(0,0,0,0.04)',
     textAlign: 'center',
     marginBottom: 16,
   },
   formTitle: {
-    fontSize: '1.25rem',
+    fontSize: '1.15rem',
     fontWeight: 700,
     color: '#1f2937',
-    marginBottom: 20,
+    margin: 0,
     textAlign: 'left',
   },
   errorBox: {
     background: '#fef2f2',
     border: '1px solid #fecaca',
     color: '#dc2626',
-    borderRadius: 12,
-    padding: '12px 16px',
-    marginBottom: 20,
+    borderRadius: 10,
+    padding: '12px 14px',
+    marginBottom: 18,
     textAlign: 'left',
     fontSize: '0.875rem',
     display: 'flex',
     gap: 8,
     alignItems: 'flex-start',
+    lineHeight: 1.5,
   },
   field: {
-    marginBottom: 20,
+    marginBottom: 18,
     textAlign: 'left',
   },
   label: {
     display: 'block',
     fontWeight: 600,
     color: '#374151',
-    marginBottom: 8,
-    fontSize: '0.9rem',
+    marginBottom: 6,
+    fontSize: '0.875rem',
   },
   labelSub: {
     fontWeight: 400,
     color: '#6b7280',
-    fontSize: '0.8rem',
+    fontSize: '0.78rem',
   },
   inputWrapper: {
     display: 'flex',
     alignItems: 'center',
-    border: '2px solid #e5e7eb',
-    borderRadius: 12,
+    border: '1.5px solid #d1d5db',
+    borderRadius: 10,
     overflow: 'hidden',
-    transition: 'border-color 0.2s',
   },
   prefix: {
-    padding: '12px 14px',
+    padding: '10px 12px',
     background: '#f9fafb',
     color: '#6b7280',
     fontWeight: 600,
     fontSize: '0.9rem',
-    borderRight: '2px solid #e5e7eb',
+    borderRight: '1.5px solid #d1d5db',
     whiteSpace: 'nowrap',
   },
   input: {
     flex: 1,
-    padding: '12px 16px',
+    padding: '10px 14px',
     border: 'none',
     outline: 'none',
     fontSize: '1rem',
@@ -346,26 +449,25 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hint: {
     display: 'block',
-    fontSize: '0.75rem',
+    fontSize: '0.72rem',
     color: '#9ca3af',
-    marginTop: 6,
+    marginTop: 5,
   },
   submitBtn: {
     width: '100%',
-    padding: '16px',
+    padding: '14px',
     background: 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)',
     color: 'white',
     border: 'none',
-    borderRadius: 14,
-    fontSize: '1.1rem',
+    borderRadius: 12,
+    fontSize: '1.05rem',
     fontWeight: 700,
-    marginTop: 8,
-    transition: 'opacity 0.2s, transform 0.1s',
+    marginTop: 6,
     letterSpacing: '0.01em',
   },
   spinner: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     border: '4px solid #e5e7eb',
     borderTop: '4px solid #0ea5e9',
     borderRadius: '50%',

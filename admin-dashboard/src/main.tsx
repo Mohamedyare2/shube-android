@@ -30,6 +30,7 @@ import AuditLogsPage from './pages/AuditLogsPage'
 import DownloadPage from './pages/DownloadPage'
 import ReferralLinkPage from './pages/ReferralLinkPage'
 import ReferralPage from './pages/public/ReferralPage'
+import PremiumFeaturesPage from './pages/PremiumFeaturesPage'
 import './index.css'
 
 // Placeholder for remaining pages
@@ -59,27 +60,29 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/privacy"   element={<PrivacyPage />} />
             </Route>
 
-            {/* Public referral registration landing page (standalone, clean layout) */}
+            {/* Public referral registration landing pages (standalone, clean layout) */}
             <Route path="/register/:code" element={<ReferralPage />} />
+            <Route path="/operator/:code" element={<ReferralPage />} />
 
             {/* ── Auth ──────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
 
             {/* ── Protected dashboard routes ────────────────── */}
             <Route element={<AppLayout />}>
-              <Route path="/dashboard"     element={<DashboardPage />} />
-              <Route path="/transactions"  element={<TransactionsPage />} />
-              <Route path="/operators"     element={<OperatorsPage />} />
-              <Route path="/devices"       element={<DevicesPage />} />
-              <Route path="/customers"     element={<CustomersPage />} />
-              <Route path="/referral-link" element={<ReferralLinkPage />} />
-              <Route path="/bundles"       element={<BundlesPage />} />
-              <Route path="/ussd-config"   element={<UssdConfigPage />} />
-              <Route path="/sms-parser"    element={<SmsParserPage />} />
-              <Route path="/reports"       element={<ReportsPage />} />
-              <Route path="/audit-logs"    element={<AuditLogsPage />} />
-              <Route path="/download"      element={<DownloadPage />} />
-              <Route path="/settings"      element={<Placeholder title="Settings" />} />
+              <Route path="/dashboard"        element={<DashboardPage />} />
+              <Route path="/transactions"     element={<TransactionsPage />} />
+              <Route path="/operators"        element={<OperatorsPage />} />
+              <Route path="/premium-features" element={<PremiumFeaturesPage />} />
+              <Route path="/devices"          element={<DevicesPage />} />
+              <Route path="/customers"        element={<CustomersPage />} />
+              <Route path="/referral-link"    element={<ReferralLinkPage />} />
+              <Route path="/bundles"          element={<BundlesPage />} />
+              <Route path="/ussd-config"      element={<UssdConfigPage />} />
+              <Route path="/sms-parser"       element={<SmsParserPage />} />
+              <Route path="/reports"          element={<ReportsPage />} />
+              <Route path="/audit-logs"       element={<AuditLogsPage />} />
+              <Route path="/download"         element={<DownloadPage />} />
+              <Route path="/settings"         element={<Placeholder title="Settings" />} />
             </Route>
 
             {/* ── 404 fallback ──────────────────────────────── */}
