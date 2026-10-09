@@ -14,6 +14,7 @@ export default function CustomersPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [search, setSearch] = useState('')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'manual' | 'referral_link'>('all')
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
@@ -31,11 +32,12 @@ export default function CustomersPage() {
     // Scope operator to their own customers
     if (isOperator && user?.id) q = q.eq('created_by', user.id)
     if (search) q = q.or(`customer_name.ilike.%${search}%,telesom_number.ilike.%${search}%,somtel_number.ilike.%${search}%`)
+    if (sourceFilter !== 'all') q = q.eq('registration_source', sourceFilter)
     const { data, count } = await q
     if (data) setCustomers(data)
     if (count !== null) setTotal(count)
     setLoading(false)
-  }, [page, search, isOperator, user?.id])
+  }, [page, search, sourceFilter, isOperator, user?.id])
 
   useEffect(() => { load() }, [load])
 
@@ -133,10 +135,21 @@ export default function CustomersPage() {
       </div>
 
       <div className="card">
-        <div className="card-header">
-          <div className="search-bar">
+        <div className="card-header" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div className="search-bar" style={{ flex: 1, minWidth: 200 }}>
             <span className="search-icon">🔍</span>
             <input className="search-input" placeholder="Search name, Telesom or Somtel number..." value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['all', 'manual', 'referral_link'] as const).map(f => (
+              <button
+                key={f}
+                className={`btn btn-sm ${sourceFilter === f ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => { setSourceFilter(f); setPage(0) }}
+              >
+                {f === 'all' ? 'All' : f === 'manual' ? '✍️ Manual' : '🔗 Via Link'}
+              </button>
+            ))}
           </div>
         </div>
         <div className="table-wrapper" style={{ border: 'none', borderRadius: 0 }}>
@@ -144,7 +157,8 @@ export default function CustomersPage() {
             <thead>
               <tr>
                 <th>Telesom Number</th>
-                <th>→ Somtel Number</th>
+                <th>📶 Somtel Number</th>
+                <th>Source</th>
                 <th>Status</th>
                 <th>Added</th>
                 <th>Actions</th>
@@ -165,6 +179,13 @@ export default function CustomersPage() {
                 <tr key={c.id}>
                   <td className="table-mono">{c.telesom_number}</td>
                   <td className="table-mono" style={{ color: 'var(--brand-accent)', fontWeight: 600 }}>{c.somtel_number}</td>
+                  <td>
+                    {c.registration_source === 'referral_link' ? (
+                      <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>🔗 Link</span>
+                    ) : (
+                      <span className="badge" style={{ fontSize: '0.75rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>✍️ Manual</span>
+                    )}
+                  </td>
                   <td><span className={`badge ${profileStatusClass(c.active ? 'active' : 'disabled')}`}>{c.active ? 'ACTIVE' : 'DISABLED'}</span></td>
                   <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDate(c.created_at)}</td>
                   <td>

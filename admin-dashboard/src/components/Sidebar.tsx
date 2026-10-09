@@ -11,31 +11,33 @@ interface NavItem {
 }
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
-  { section: 'Overview',     path: '/dashboard',    icon: '📊', label: 'Global Dashboard' },
+  { section: 'Overview',     path: '/dashboard',     icon: '📊', label: 'Global Dashboard' },
   { path: '/transactions',   icon: '💳', label: 'All Transactions' },
-  { section: 'Management',   path: '/operators',    icon: '🧑‍💼', label: 'Sarif Operators' },
+  { section: 'Management',   path: '/operators',     icon: '🧑‍💼', label: 'Sarif Operators' },
   { path: '/devices',        icon: '📱', label: 'All Devices' },
   { path: '/customers',      icon: '👥', label: 'Customers' },
+  { path: '/referral-link',  icon: '🔗', label: 'Registration Link' },
   { path: '/bundles',        icon: '📦', label: 'Bundle Rules' },
-  { section: 'Configuration',path: '/ussd-config',  icon: '⚙️', label: 'USSD Config' },
+  { section: 'Configuration',path: '/ussd-config',   icon: '⚙️', label: 'USSD Config' },
   { path: '/sms-parser',     icon: '📩', label: 'SMS Parser' },
-  { section: 'Reporting',    path: '/reports',      icon: '📈', label: 'Reports' },
+  { section: 'Reporting',    path: '/reports',       icon: '📈', label: 'Reports' },
   { path: '/audit-logs',     icon: '📋', label: 'Audit Logs' },
   { path: '/settings',       icon: '🔧', label: 'Settings' },
-  { section: 'Downloads',    path: '/download',     icon: '📥', label: 'Downloads' },
+  { section: 'Downloads',    path: '/download',      icon: '📥', label: 'Downloads' },
 ]
 
 const OPERATOR_NAV_ITEMS: NavItem[] = [
-  { section: 'Overview',      path: '/dashboard',    icon: '📊', label: 'Dashboard' },
+  { section: 'Overview',      path: '/dashboard',     icon: '📊', label: 'Dashboard' },
   { path: '/transactions',    icon: '💳', label: 'Transactions' },
-  { section: 'Management',   path: '/devices',       icon: '📱', label: 'My Devices' },
+  { section: 'Management',   path: '/devices',        icon: '📱', label: 'My Devices' },
   { path: '/customers',       icon: '👥', label: 'Customers' },
+  { path: '/referral-link',   icon: '🔗', label: 'My Registration Link' },
   { path: '/bundles',         icon: '📦', label: 'Bundle Rules' },
-  { section: 'Configuration', path: '/ussd-config',  icon: '⚙️', label: 'USSD Config' },
+  { section: 'Configuration', path: '/ussd-config',   icon: '⚙️', label: 'USSD Config' },
   { path: '/sms-parser',      icon: '📩', label: 'SMS Parser' },
-  { section: 'Reporting',     path: '/reports',      icon: '📈', label: 'Reports' },
+  { section: 'Reporting',     path: '/reports',       icon: '📈', label: 'Reports' },
   { path: '/audit-logs',      icon: '📋', label: 'Audit Logs' },
-  { section: 'Downloads',     path: '/download',     icon: '📥', label: 'Downloads' },
+  { section: 'Downloads',     path: '/download',      icon: '📥', label: 'Downloads' },
 ]
 
 interface SidebarProps {

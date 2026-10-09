@@ -35,6 +35,9 @@ export interface Operator {
   updated_at: string
   ussd_template: string
   ussd_reply_template: string
+  referral_code?: string | null
+  referral_welcome_message?: string | null
+  referral_active?: boolean
   // Joined
   profile?: Profile
   devices?: Device[]
@@ -50,6 +53,8 @@ export interface Customer {
   active: boolean
   notes: string | null
   created_by: string | null
+  registration_source?: 'manual' | 'referral_link' | string
+  referred_by_operator_id?: string | null
   created_at: string
   updated_at: string
 }
