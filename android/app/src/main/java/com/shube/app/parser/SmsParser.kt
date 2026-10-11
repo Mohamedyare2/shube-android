@@ -22,22 +22,31 @@ class SmsParser {
     private val txIdPattern = Pattern.compile("Tix[:\\s]*([A-Za-z0-9]+)|Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(messageBody: String, sender: String): ParsedSms? {
+        // Normalize whitespace and newlines for easier matching
+        val normalizedBody = messageBody.replace(Regex("\\s+"), " ")
+
         // Prevent processing outgoing transfers
-        if (messageBody.contains("ayaad u dirtay", ignoreCase = true)) {
+        if (normalizedBody.contains("ayaad u dirtay", ignoreCase = true) || 
+            normalizedBody.contains("u dirtay", ignoreCase = true)) {
             return null
         }
 
+        val amountMatcher = amountPattern.matcher(normalizedBody)
+        if (!amountMatcher.find()) {
+            return null // Cannot determine amount, invalid payment SMS
+        }
+
+        // Check the text immediately following the amount
+        val textAfterAmount = normalizedBody.substring(amountMatcher.end()).trimStart()
+        
         // Ensure it is an incoming payment
-        val isIncoming = messageBody.contains("ka heshay", ignoreCase = true) || 
-                         messageBody.contains("received", ignoreCase = true)
+        val isIncoming = textAfterAmount.startsWith("ka", ignoreCase = true) || 
+                         textAfterAmount.startsWith("received", ignoreCase = true) ||
+                         normalizedBody.contains("ka heshay", ignoreCase = true) ||
+                         normalizedBody.contains("received", ignoreCase = true)
         
         if (!isIncoming) {
             return null
-        }
-
-        val amountMatcher = amountPattern.matcher(messageBody)
-        if (!amountMatcher.find()) {
-            return null // Cannot determine amount, invalid payment SMS
         }
 
         val amountStr = (amountMatcher.group(1) ?: amountMatcher.group(2))?.replace(",", "") ?: return null
