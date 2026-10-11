@@ -139,8 +139,32 @@ export function duration(start: string | null, end: string | null): string {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
 }
 
-// ── Is device online ─────────────────────────────────────────
-export function isOnline(lastSeen: string | null, thresholdMinutes = 5): boolean {
-  if (!lastSeen) return false
-  return (Date.now() - new Date(lastSeen).getTime()) < thresholdMinutes * 60 * 1000
+// ── Today's Boundaries in Operating Timezone (Africa/Mogadishu / Hargeisa UTC+3) ───
+export function getTodayBounds(timeZone = 'Africa/Mogadishu'): { fromDate: string; toDate: string; todayDateStr: string } {
+  try {
+    const now = new Date()
+    // en-CA formats as YYYY-MM-DD
+    const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+    // Start of calendar day in UTC+3 (00:00:00)
+    const startLocal = new Date(`${dateStr}T00:00:00+03:00`)
+    // End of calendar day (inclusive up to next midnight)
+    const endLocal = new Date(startLocal.getTime() + 24 * 60 * 60 * 1000)
+    
+    return {
+      fromDate: startLocal.toISOString(),
+      toDate: endLocal.toISOString(),
+      todayDateStr: dateStr
+    }
+  } catch {
+    // Safe fallback to local calendar midnight
+    const now = new Date()
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+    return {
+      fromDate: start.toISOString(),
+      toDate: end.toISOString(),
+      todayDateStr: start.toISOString().slice(0, 10)
+    }
+  }
 }
+

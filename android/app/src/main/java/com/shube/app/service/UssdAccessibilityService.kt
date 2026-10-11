@@ -20,11 +20,16 @@ import kotlinx.coroutines.delay
  * IMPORTANT: This requires the operator to manually enable the accessibility 
  * service in Android Settings.
  */
+data class UssdDialogEvent(
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
 class UssdAccessibilityService : AccessibilityService() {
 
     companion object {
-        // Shared flow to emit parsed USSD dialog text back to the State Machine
-        private val _ussdDialogFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
+        // Shared flow to emit parsed USSD dialog events back to the State Machine
+        private val _ussdDialogFlow = MutableSharedFlow<UssdDialogEvent>(extraBufferCapacity = 10)
         val ussdDialogFlow = _ussdDialogFlow.asSharedFlow()
         
         // Command channel to tell this service what to reply (if applicable)
@@ -36,6 +41,10 @@ class UssdAccessibilityService : AccessibilityService() {
         
         var isServiceActive = false
             private set
+
+        fun emitDialog(text: String) {
+            _ussdDialogFlow.tryEmit(UssdDialogEvent(text = text))
+        }
     }
 
     override fun onServiceConnected() {
@@ -95,7 +104,7 @@ class UssdAccessibilityService : AccessibilityService() {
                         }
                         
                         // Emit to state machine AFTER we finish so it doesn't advance prematurely
-                        _ussdDialogFlow.tryEmit(dialogText)
+                        _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
                         
                         // Small delay before releasing lock to prevent immediate re-trigger by closing animation
                         delay(500)
@@ -108,7 +117,7 @@ class UssdAccessibilityService : AccessibilityService() {
                     clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE"))
                     
                     // Emit immediately since there is no reply
-                    _ussdDialogFlow.tryEmit(dialogText)
+                    _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
                     
                     CoroutineScope(Dispatchers.Main).launch {
                         delay(500)

@@ -7,6 +7,7 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import com.shube.app.local.PinManager
 import com.shube.app.service.UssdAccessibilityService
+import com.shube.app.service.UssdDialogEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -30,6 +31,12 @@ enum class UssdResult {
     INTERACTION_REQUIRED
 }
 
+data class UssdExecutionOutcome(
+    val result: UssdResult,
+    val rawResponseText: String?,
+    val diagnosticReason: String
+)
+
 class UssdStateMachine(private val context: Context) {
     
     private val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
@@ -37,28 +44,35 @@ class UssdStateMachine(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     
     /**
-     * Executes the USSD workflow steps.
+     * Executes the USSD workflow steps and returns structured outcome with raw response.
      * 
      * @param steps The configured steps from the database
      * @param somtelNumber The destination number
      * @param bundleOption The USSD bundle option (e.g., '05')
-     * @return UssdResult indicating the final outcome
+     * @param transactionStartTime Timestamp when this specific transaction began
+     * @return UssdExecutionOutcome with classification, raw dialog text, and diagnostic reason
      */
     suspend fun executeWorkflow(
         steps: List<UssdStep>,
         somtelNumber: String,
-        bundleOption: String
-    ): UssdResult {
+        bundleOption: String,
+        transactionStartTime: Long = System.currentTimeMillis()
+    ): UssdExecutionOutcome {
         
-        Log.d("UssdStateMachine", "Starting workflow with ${steps.size} steps")
+        Log.d("UssdStateMachine", "Starting workflow with ${steps.size} steps for $somtelNumber")
         
         // Ensure accessibility service is running if we have multi-step flows
         if (steps.size > 1 && !UssdAccessibilityService.isServiceActive) {
             Log.e("UssdStateMachine", "Accessibility service is not active, cannot complete multi-step USSD")
-            return UssdResult.INTERACTION_REQUIRED
+            return UssdExecutionOutcome(
+                result = UssdResult.INTERACTION_REQUIRED,
+                rawResponseText = null,
+                diagnosticReason = "Accessibility service not active"
+            )
         }
 
-        var currentDialogText = ""
+        var lastCapturedDialogText: String? = null
+        var lastCapturedTimestamp: Long = 0L
 
         try {
             for ((index, step) in steps.withIndex()) {
@@ -67,7 +81,11 @@ class UssdStateMachine(private val context: Context) {
                 when (step.type) {
                     "DIAL" -> {
                         val template = step.ussdCodeTemplate 
-                            ?: return UssdResult.FAILED.also { Log.e("UssdStateMachine", "DIAL step missing template") }
+                            ?: return UssdExecutionOutcome(
+                                result = UssdResult.FAILED,
+                                rawResponseText = null,
+                                diagnosticReason = "DIAL step missing USSD template"
+                            ).also { Log.e("UssdStateMachine", "DIAL step missing template") }
                         
                         val codeToDial = template
                             .replace("{bundle_option}", bundleOption)
@@ -79,28 +97,42 @@ class UssdStateMachine(private val context: Context) {
                         val success = dialUssd(codeToDial)
                         if (!success) {
                             Log.e("UssdStateMachine", "Failed to initiate USSD dial")
-                            return UssdResult.INTERACTION_REQUIRED
+                            return UssdExecutionOutcome(
+                                result = UssdResult.INTERACTION_REQUIRED,
+                                rawResponseText = null,
+                                diagnosticReason = "CALL_PHONE permission not granted or call failed"
+                            )
                         }
                     }
                     
                     "WAIT_RESPONSE" -> {
-                        currentDialogText = waitForDialog(step.timeoutMs)
-                        Log.d("UssdStateMachine", "Received dialog: $currentDialogText")
+                        val event = waitForDialog(step.timeoutMs, transactionStartTime)
+                        lastCapturedDialogText = event.text
+                        lastCapturedTimestamp = event.timestamp
+                        Log.d("UssdStateMachine", "Received dialog: ${event.text}")
                     }
                     
                     "ENTER_NUMBER" -> {
                         UssdAccessibilityService.nextReply = somtelNumber
-                        currentDialogText = waitForDialog(step.timeoutMs)
+                        val event = waitForDialog(step.timeoutMs, transactionStartTime)
+                        lastCapturedDialogText = event.text
+                        lastCapturedTimestamp = event.timestamp
                     }
                     
                     "ENTER_PIN" -> {
                         val pin = pinManager.getPin()
                         if (pin.isNullOrBlank()) {
                             Log.e("UssdStateMachine", "PIN not configured")
-                            return UssdResult.FAILED
+                            return UssdExecutionOutcome(
+                                result = UssdResult.FAILED,
+                                rawResponseText = null,
+                                diagnosticReason = "PIN not configured on device"
+                            )
                         }
                         UssdAccessibilityService.nextReply = pin
-                        currentDialogText = waitForDialog(step.timeoutMs)
+                        val event = waitForDialog(step.timeoutMs, transactionStartTime)
+                        lastCapturedDialogText = event.text
+                        lastCapturedTimestamp = event.timestamp
                     }
                     
                     "SEND_REPLY" -> {
@@ -113,64 +145,72 @@ class UssdStateMachine(private val context: Context) {
                             .replace("{pin}", pinManager.getPin() ?: "00000")
                         Log.d("UssdStateMachine", "Sending USSD reply: $reply (template: $rawReply)")
                         UssdAccessibilityService.nextReply = reply
-                        currentDialogText = waitForDialog(step.timeoutMs)
+                        val event = waitForDialog(step.timeoutMs, transactionStartTime)
+                        lastCapturedDialogText = event.text
+                        lastCapturedTimestamp = event.timestamp
                     }
                     
                     "READ_RESPONSE" -> {
                         // Wait for the final outcome dialog to appear after the last reply was sent
-                        currentDialogText = waitForDialog(step.timeoutMs)
-                        Log.d("UssdStateMachine", "Final response text: $currentDialogText")
+                        try {
+                            val event = waitForDialog(step.timeoutMs, transactionStartTime)
+                            lastCapturedDialogText = event.text
+                            lastCapturedTimestamp = event.timestamp
+                            Log.d("UssdStateMachine", "Final response text captured: ${event.text}")
+                        } catch (e: TimeoutCancellationException) {
+                            Log.w("UssdStateMachine", "Timeout waiting for explicit READ_RESPONSE dialog, using last captured text")
+                        }
                         
-                        val defaultSuccessPatterns = listOf(
-                            "ku guuleystay", "lagu shubay", "guul", "guuleystay", "u shubtay",
-                            "successful", "success", "confirmed", "done", "ok", "haragaagu waa", "haraagaaga cusub"
-                        )
-                        val defaultFailurePatterns = listOf(
-                            "haraagaagu kuguma filna", "ma haysatid", "khalad", "ma shaqaynayo",
-                            "failed", "error", "insufficient", "invalid", "not found", "lama heli karo"
+                        val analysis = SomaliUssdResponseAnalyzer.analyze(
+                            dialogText = lastCapturedDialogText,
+                            customSuccessPatterns = step.successPatterns,
+                            customFailurePatterns = step.failurePatterns
                         )
 
-                        val allSuccess = (step.successPatterns ?: emptyList()) + defaultSuccessPatterns
-                        val allFailure = (step.failurePatterns ?: emptyList()) + defaultFailurePatterns
-
-                        val isSuccess = allSuccess.any { 
-                            currentDialogText.contains(it, ignoreCase = true) 
-                        }
-                        
-                        val isFailure = allFailure.any { 
-                            currentDialogText.contains(it, ignoreCase = true) 
-                        }
-                        
-                        return when {
-                            isSuccess -> UssdResult.SUCCESS
-                            isFailure -> UssdResult.FAILED
-                            else -> UssdResult.UNKNOWN
-                        }
+                        return UssdExecutionOutcome(
+                            result = analysis.status,
+                            rawResponseText = lastCapturedDialogText,
+                            diagnosticReason = analysis.diagnosticReason
+                        )
                     }
                 }
             }
             
-            return UssdResult.SUCCESS // Reached end without returning
+            // If the steps did not have an explicit READ_RESPONSE step, analyze whatever final dialog was seen
+            val fallbackAnalysis = SomaliUssdResponseAnalyzer.analyze(
+                dialogText = lastCapturedDialogText
+            )
+            
+            return UssdExecutionOutcome(
+                result = fallbackAnalysis.status,
+                rawResponseText = lastCapturedDialogText,
+                diagnosticReason = fallbackAnalysis.diagnosticReason
+            )
             
         } catch (e: TimeoutCancellationException) {
             Log.e("UssdStateMachine", "USSD step timed out")
-            return UssdResult.UNKNOWN
+            return UssdExecutionOutcome(
+                result = UssdResult.UNKNOWN,
+                rawResponseText = lastCapturedDialogText,
+                diagnosticReason = "USSD session timed out without receiving expected response"
+            )
         } catch (e: Exception) {
             Log.e("UssdStateMachine", "Error during USSD execution", e)
-            return UssdResult.UNKNOWN
+            return UssdExecutionOutcome(
+                result = UssdResult.UNKNOWN,
+                rawResponseText = lastCapturedDialogText,
+                diagnosticReason = "Exception during USSD execution: ${e.message}"
+            )
         }
     }
     
     private fun dialUssd(code: String): Boolean {
         return try {
-            // Check permission before dialing
             if (context.checkSelfPermission(android.Manifest.permission.CALL_PHONE) != 
                 android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 return false
             }
             
-            // Encode the USSD code (especially the '#' at the end which must become '%23')
-            // Otherwise Android treats it as a URI fragment and drops it, causing 'Invalid MMI Code'
             val encodedCode = android.net.Uri.encode(code)
             
             val intent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
@@ -187,9 +227,15 @@ class UssdStateMachine(private val context: Context) {
         }
     }
     
-    private suspend fun waitForDialog(timeoutMs: Long): String {
+    /**
+     * Waits for a dialog event that arrived AFTER the current transaction started.
+     * Prevents picking up stale dialogs from prior transactions.
+     */
+    private suspend fun waitForDialog(timeoutMs: Long, minTimestamp: Long): UssdDialogEvent {
         return withTimeout(timeoutMs) {
-            UssdAccessibilityService.ussdDialogFlow.first()
+            UssdAccessibilityService.ussdDialogFlow.first { event ->
+                event.timestamp >= (minTimestamp - 1000) // 1 second clock skew tolerance
+            }
         }
     }
 }

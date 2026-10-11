@@ -382,6 +382,12 @@ export default function TransactionsPage() {
                       <span style={{ fontWeight: 500, fontFamily: typeof value === 'string' && value.match(/^0\d/) ? 'monospace' : 'inherit' }}>{value}</span>
                     </div>
                   ))}
+                  {selected.result_text && (
+                    <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                      <div style={{ fontWeight: 600, fontSize: '0.75rem', color: '#60a5fa', marginBottom: '4px', textTransform: 'uppercase' }}>📱 Telecom USSD Response:</div>
+                      <div style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{selected.result_text}</div>
+                    </div>
+                  )}
                   {selected.failure_reason && (
                     <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', fontSize: '0.8rem', color: 'hsl(0,84%,65%)' }}>
                       ⚠️ {selected.failure_reason}

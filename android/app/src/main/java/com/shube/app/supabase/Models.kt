@@ -60,6 +60,7 @@ data class TransactionInsert(
 data class TransactionUpdate(
     val status: String,
     @SerialName("failure_reason") val failureReason: String? = null,
+    @SerialName("result_text")    val resultText: String? = null,
     @SerialName("completed_at")   val completedAt: String? = null
     // NOTE: "notes" is NOT a column in transactions table
 )

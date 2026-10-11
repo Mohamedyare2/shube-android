@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Transaction, Device, DashboardStats } from '../types/database'
-import { formatSLS, formatNumber, formatTime, txStatusClass, txStatusLabel, deviceStatusClass, timeAgo } from '../lib/utils'
+import { formatSLS, formatNumber, formatTime, txStatusClass, txStatusLabel, deviceStatusClass, timeAgo, getTodayBounds } from '../lib/utils'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -28,6 +28,7 @@ export default function DashboardPage() {
 
   const [operatorRow, setOperatorRow] = useState<OperatorRow | null>(null)
   const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [todayDateLabel, setTodayDateLabel] = useState<string>('')
   const [recentTxns, setRecentTxns] = useState<Transaction[]>([])
   const [devices, setDevices] = useState<Device[]>([])
   const [chartData, setChartData] = useState<{ name: string; success: number; failed: number; total: number }[]>([])
@@ -48,14 +49,23 @@ export default function DashboardPage() {
     const opId = operatorRow?.id
     if (isOperator && !opId) return
 
-    const fromDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    // Today's Calendar Boundaries in Operator/Business Timezone (Africa/Hargeisa / Mogadishu UTC+3)
+    const { fromDate, toDate, todayDateStr } = getTodayBounds('Africa/Mogadishu')
+    setTodayDateLabel(todayDateStr)
 
     let statsData
     if (isOperator && opId) {
-      const res = await supabase.rpc('get_operator_stats', { p_operator_id: opId, p_from_date: fromDate })
+      const res = await supabase.rpc('get_operator_stats', { 
+        p_operator_id: opId, 
+        p_from_date: fromDate,
+        p_to_date: toDate
+      })
       statsData = res.data
     } else {
-      const res = await supabase.rpc('get_dashboard_stats', { p_from_date: fromDate })
+      const res = await supabase.rpc('get_dashboard_stats', { 
+        p_from_date: fromDate,
+        p_to_date: toDate
+      })
       statsData = res.data
     }
     if (statsData) setStats(statsData as unknown as DashboardStats)
@@ -118,8 +128,20 @@ export default function DashboardPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, () => loadData())
       .subscribe()
-    return () => { supabase.removeChannel(txChannel) }
-  }, [loadData])
+
+    // Periodic check every 60 seconds so crossing midnight automatically rolls over today's dashboard
+    const midnightInterval = setInterval(() => {
+      const { todayDateStr } = getTodayBounds('Africa/Mogadishu')
+      if (todayDateStr !== todayDateLabel && todayDateLabel !== '') {
+        loadData()
+      }
+    }, 60_000)
+
+    return () => { 
+      supabase.removeChannel(txChannel)
+      clearInterval(midnightInterval)
+    }
+  }, [loadData, todayDateLabel])
 
   // Refresh card balance after operator row update
   const refreshCardBalance = useCallback(async () => {
@@ -174,34 +196,34 @@ export default function DashboardPage() {
   const statCards = [
     {
       icon: '📊',
-      label: "Last 24h Transactions",
+      label: "Today's Transactions",
       value: formatNumber(totalToday),
       gradient: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
       bg: 'rgba(59,130,246,0.08)',
       border: 'rgba(59,130,246,0.2)',
       glow: 'rgba(59,130,246,0.15)',
-      sub: `${successRate}% success rate`,
+      sub: `${successRate}% success rate today`,
     },
     {
       icon: '✅',
-      label: "Last 24h Success",
+      label: "Today's Success",
       value: formatNumber(stats?.success ?? 0),
       gradient: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)',
       bg: 'rgba(34,197,94,0.08)',
       border: 'rgba(34,197,94,0.2)',
       glow: 'rgba(34,197,94,0.15)',
-      sub: 'Completed',
+      sub: 'Completed today',
       valueColor: '#22c55e',
     },
     {
       icon: '❌',
-      label: "Last 24h Failed",
+      label: "Today's Failed",
       value: formatNumber(stats?.failed ?? 0),
       gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
       bg: 'rgba(239,68,68,0.08)',
       border: 'rgba(239,68,68,0.2)',
       glow: 'rgba(239,68,68,0.15)',
-      sub: 'Need attention',
+      sub: 'Failed today',
       valueColor: '#ef4444',
     },
     {
@@ -212,18 +234,18 @@ export default function DashboardPage() {
       bg: 'rgba(245,158,11,0.08)',
       border: 'rgba(245,158,11,0.2)',
       glow: 'rgba(245,158,11,0.15)',
-      sub: 'In queue',
+      sub: 'In queue today',
       valueColor: '#f59e0b',
     },
     {
       icon: '💰',
-      label: "Last 24h Processed",
+      label: "Today's Processed Value",
       value: formatSLS(stats?.total_sls_processed ?? 0),
       gradient: 'linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%)',
       bg: 'rgba(20,184,166,0.08)',
       border: 'rgba(20,184,166,0.2)',
       glow: 'rgba(20,184,166,0.15)',
-      sub: 'SLS collected',
+      sub: 'SLS collected today',
       valueColor: '#14b8a6',
       smallValue: true,
     },
@@ -243,12 +265,14 @@ export default function DashboardPage() {
   return (
     <div className="page-container">
       {/* Page Header */}
-      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-2)' }}>
         <div>
           <h1 className="page-title" style={{ background: 'linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-            Dashboard
+            Today's Dashboard
           </h1>
-          <p className="page-subtitle">Live system overview — auto-updating every change</p>
+          <p className="page-subtitle">
+            Calendar day statistics ({todayDateLabel || 'Today'}) · Africa/Hargeisa (UTC+3)
+          </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(34,197,94,0.08)', padding: '6px 12px', borderRadius: 'var(--radius-full)', border: '1px solid rgba(34,197,94,0.2)' }}>
           <span className="pulse-dot" />

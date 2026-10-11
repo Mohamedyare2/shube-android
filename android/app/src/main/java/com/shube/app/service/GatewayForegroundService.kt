@@ -189,32 +189,40 @@ class GatewayForegroundService : Service() {
         val steps = buildUssdSteps(bundle)
 
         // ── Step 5: Execute USSD workflow ─────────────────────────
+        val txStartTime = System.currentTimeMillis()
         val ussdMachine = UssdStateMachine(this)
-        val result = ussdMachine.executeWorkflow(
-            steps         = steps,
-            somtelNumber  = somtelNumber ?: "",
-            bundleOption  = bundle.ussdOption
+        val outcome = ussdMachine.executeWorkflow(
+            steps                = steps,
+            somtelNumber         = somtelNumber ?: "",
+            bundleOption         = bundle.ussdOption,
+            transactionStartTime = txStartTime
         )
 
-        Log.d("GatewayService", "USSD result: $result for transaction $transactionId")
+        Log.d("GatewayService", "USSD outcome: ${outcome.result}, reason='${outcome.diagnosticReason}', response='${outcome.rawResponseText}' for transaction $transactionId")
 
         // ── Step 6: Update transaction status ─────────────────────
         // Status MUST be lowercase to match the DB CHECK constraint
-        val (status, notes) = when (result) {
-            UssdResult.SUCCESS              -> Pair("success",      "USSD workflow completed successfully")
-            UssdResult.FAILED               -> Pair("failed",       "USSD reported failure")
-            UssdResult.UNKNOWN              -> Pair("unknown_result", "USSD completed but result is unclear")
-            UssdResult.INTERACTION_REQUIRED -> Pair("ussd_interaction_required", "Accessibility service not active")
+        val (status, failureReason) = when (outcome.result) {
+            UssdResult.SUCCESS              -> Pair("success", null)
+            UssdResult.FAILED               -> Pair("failed", outcome.diagnosticReason)
+            UssdResult.UNKNOWN              -> Pair("unknown_result", outcome.diagnosticReason)
+            UssdResult.INTERACTION_REQUIRED -> Pair("ussd_interaction_required", outcome.diagnosticReason)
         }
 
-        SupabaseRepository.updateTransactionStatus(transactionId, status, notes, completedAt = java.time.Instant.now().toString())
+        SupabaseRepository.updateTransactionStatus(
+            transactionId = transactionId,
+            status = status,
+            notes = failureReason,
+            resultText = outcome.rawResponseText,
+            completedAt = java.time.Instant.now().toString()
+        )
 
         // Update notification with final status
-        val icon = when (result) {
+        val icon = when (outcome.result) {
             UssdResult.SUCCESS -> "✅"
             else               -> "❌"
         }
-        notify("$icon Bundle ${if (result == UssdResult.SUCCESS) "Sent" else "Failed"}", "${bundle.bundleName} for $sender — $status")
+        notify("$icon Bundle ${if (outcome.result == UssdResult.SUCCESS) "Sent" else "Failed"}", "${bundle.bundleName} for $sender — $status")
 
         // Return to standby after 5 seconds
         kotlinx.coroutines.delay(5_000)

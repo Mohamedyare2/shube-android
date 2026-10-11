@@ -186,6 +186,7 @@ export interface Transaction {
   status: TransactionStatus
   ussd_reference: string | null
   failure_reason: string | null
+  result_text?: string | null
   sms_body: string | null
   sms_timestamp: string | null
   test_mode: boolean

@@ -99,6 +99,7 @@ object SupabaseRepository {
         transactionId: String,
         status: String,
         notes: String? = null,
+        resultText: String? = null,
         completedAt: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -106,6 +107,7 @@ object SupabaseRepository {
                 .update(TransactionUpdate(
                     status = status,
                     failureReason = if (status in listOf("failed", "ussd_interaction_required", "unknown_result", "invalid_amount")) notes else null,
+                    resultText = resultText,
                     completedAt = completedAt
                 )) {
                     filter { eq("id", transactionId) }
