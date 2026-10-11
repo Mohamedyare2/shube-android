@@ -90,8 +90,8 @@ export default function MuminBundlesPage() {
                     {Number(b.amount_sls).toLocaleString()} SLS
                   </div>
                   {b.cost_price && (
-                    <div style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                      Cost: ${b.cost_price}
+                    <div style={{ fontSize: '0.75rem', color: '#FCA5A5', fontWeight: 600 }}>
+                      Card Deduction: -${b.cost_price} USD
                     </div>
                   )}
                 </div>

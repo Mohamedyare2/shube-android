@@ -353,7 +353,7 @@ export default function BundlesPage() {
                 <th>USSD Option</th>
                 <th>USSD Code</th>
                 <th>Replies</th>
-                <th>Cost ($)</th>
+                <th>Card Deduction ($)</th>
                 <th>Revenue ($)</th>
                 <th>Profit ($)</th>
                 <th>Status</th>
@@ -403,9 +403,9 @@ export default function BundlesPage() {
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>
                       )}
                     </td>
-                    {/* Cost Price */}
+                    {/* Card Deduction */}
                     <td style={{ fontFamily: 'monospace', color: b.cost_price != null ? 'hsl(0,84%,65%)' : 'var(--text-muted)' }}>
-                      {formatUSD(b.cost_price)}
+                      {b.cost_price != null ? `-$${Number(b.cost_price).toFixed(4)}` : '—'}
                     </td>
                     {/* Revenue */}
                     <td style={{ fontFamily: 'monospace', color: 'var(--brand-primary)' }}>
@@ -472,14 +472,14 @@ export default function BundlesPage() {
                 </div>
               </div>
 
-              {/* ── Cost & Profit Section ────────────────────────────── */}
-              <div style={{ margin: 'var(--space-3) 0', padding: 'var(--space-4)', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ fontWeight: 700, color: 'var(--brand-success)', marginBottom: 'var(--space-3)', fontSize: '0.875rem' }}>
-                  💰 Xisaabinta Faa'idada (Profit Calculation)
+              {/* ── Card Deduction Section ────────────────────────────── */}
+              <div style={{ margin: 'var(--space-3) 0', padding: 'var(--space-4)', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ fontWeight: 700, color: 'var(--brand-success)', marginBottom: 'var(--space-3)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  💳 Lacagta Ka Go'aysa Card-ka (Card Deduction)
                 </div>
                 <div className="form-row">
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label className="form-label">Cost Price (USD $) *</label>
+                    <label className="form-label">Lacagta Card-ka Ka Go'aysa (USD $) *</label>
                     <input
                       type="number"
                       step="0.0001"
@@ -489,27 +489,20 @@ export default function BundlesPage() {
                       placeholder="0.1200"
                       style={{ borderColor: 'rgba(16,185,129,0.4)' }}
                     />
-                    <span className="form-hint">Qiimaha shirkadda ku iibisatay bundle-kan (dollar)</span>
+                    <span className="form-hint">Lacagta dollar-ka ah ee toos looga jarayo hadhaaga card-ka marka xidhmadani guuleysato (Tus: 0.12 ama 0.50)</span>
                   </div>
-                  {/* Live profit preview */}
-                  {formAmtSls > 0 && (
-                    <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 4, paddingBottom: 4 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Revenue ({formAmtSls} SLS × {EXCHANGE_RATE.toFixed(6)})</span>
-                        <span style={{ fontFamily: 'monospace', color: 'var(--brand-primary)' }}>${formRevenue.toFixed(4)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Cost Price</span>
-                        <span style={{ fontFamily: 'monospace', color: 'hsl(0,84%,65%)' }}>{formCost != null ? `$${formCost.toFixed(4)}` : '—'}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '6px 0', marginTop: 2 }}>
-                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Net Profit</span>
-                        <span style={{ fontFamily: 'monospace', fontWeight: 800, color: formProfit != null ? (formProfit >= 0 ? 'var(--brand-success)' : 'var(--brand-danger)') : 'var(--text-muted)' }}>
-                          {formProfit != null ? `${formProfit >= 0 ? '+' : ''}$${formProfit.toFixed(4)}` : '—'}
-                        </span>
-                      </div>
+                  {/* Card deduction preview box */}
+                  <div style={{ flex: 1.3, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6, padding: '12px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(16,185,129,0.15)' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      Lacagta Card-ka laga jarayo haddii ay guuleysato:
                     </div>
-                  )}
+                    <div style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: formCost != null ? 'hsl(0,84%,65%)' : 'var(--text-muted)' }}>
+                      {formCost != null ? `-$${formCost.toFixed(4)} USD` : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      ⚡ Marka xidhmadani ay <strong style={{ color: 'var(--brand-success)' }}>guulaysato</strong>, lacagtani waxay toos uga go'aysaa hadhaaga card-ka ee Operator-ka.
+                    </div>
+                  </div>
                 </div>
               </div>
 
