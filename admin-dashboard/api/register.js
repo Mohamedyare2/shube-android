@@ -5,28 +5,18 @@ const PHONE_RE = /^[0-9]{9}$/;
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-/**
- * Checks whether an operator has an active 'registration_via_link' entitlement.
- * Returns { allowed: boolean, reason?: string, status?: string }
- */
 async function checkOperatorFeatureAccess(operatorId) {
   try {
     const resp = await sbFetch(
       `${SUPABASE_URL}/rest/v1/operator_feature_access?operator_id=eq.${operatorId}&feature_key=eq.registration_via_link&select=status,expires_at&limit=1`
     );
-    if (!resp.ok) {
-      // If table doesn't exist yet, we do not lock the user out permanently until migration is run,
-      // but if the table exists, we strictly enforce it.
-      const text = await resp.text();
-      console.warn('operator_feature_access query status:', resp.status, text);
-      return { allowed: true, status: 'unconfigured' };
-    }
+    if (!resp.ok) return { allowed: true, status: 'error_fallback' };
     const rows = await resp.json();
     if (!Array.isArray(rows) || rows.length === 0) {
-      return { allowed: false, reason: 'FEATURE_NOT_GRANTED', status: 'inactive' };
+      return { allowed: false, reason: 'FEATURE_NOT_AUTHORIZED', status: 'inactive' };
     }
     const access = rows[0];
     if (access.status === 'suspended') {
@@ -61,7 +51,6 @@ export default async function handler(req, res) {
     return jsonResponse(res, 400, { error: 'MISSING_CODE', message: 'Referral code is required' });
   }
 
-  // Normalize code: decode URI and lowercase
   let cleanCode = '';
   try {
     cleanCode = decodeURIComponent(rawCode).trim().toLowerCase();
@@ -69,7 +58,7 @@ export default async function handler(req, res) {
     cleanCode = rawCode.trim().toLowerCase();
   }
 
-  // ── GET: fetch operator public details for landing page ──────
+  // ── GET: fetch operator public details for landing page ──────────
   if (req.method === 'GET') {
     try {
       const opResp = await sbFetch(
@@ -109,11 +98,44 @@ export default async function handler(req, res) {
         });
       }
 
+      // Fetch ZAAD payment details from operator_feature_access
+      let zaadNumber = null;
+      let zaadAccountName = null;
+      try {
+        const faResp = await sbFetch(
+          `${SUPABASE_URL}/rest/v1/operator_feature_access?operator_id=eq.${op.id}&feature_key=eq.registration_via_link&select=zaad_number,zaad_account_name&limit=1`
+        );
+        if (faResp.ok) {
+          const faRows = await faResp.json();
+          if (Array.isArray(faRows) && faRows.length > 0) {
+            zaadNumber = faRows[0].zaad_number || null;
+            zaadAccountName = faRows[0].zaad_account_name || null;
+          }
+        }
+      } catch (_) {}
+
+      // Fetch operator's configured bundles (slots 1-5)
+      let bundles = [];
+      try {
+        const bResp = await sbFetch(
+          `${SUPABASE_URL}/rest/v1/operator_bundles?operator_id=eq.${op.id}&order=slot.asc&select=slot,bundle_name,bundle_price`
+        );
+        if (bResp.ok) {
+          const bRows = await bResp.json();
+          if (Array.isArray(bRows)) {
+            bundles = bRows.filter(b => b.bundle_name || b.bundle_price !== null);
+          }
+        }
+      } catch (_) {}
+
       return jsonResponse(res, 200, {
         success: true,
         operator_id: op.id,
         username: op.username,
         welcome_message: op.referral_welcome_message || null,
+        zaad_number: zaadNumber,
+        zaad_account_name: zaadAccountName,
+        bundles,
       });
     } catch (err) {
       console.error('GET /api/register error:', err);
@@ -121,7 +143,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── POST: register a new customer via referral ────────────────
+  // ── POST: register a new customer via referral ───────────────────
   if (req.method === 'POST') {
     try {
       const { telesom_number, somtel_number } = req.body || {};
@@ -173,7 +195,6 @@ export default async function handler(req, res) {
 
       let customerId;
       if (Array.isArray(existing) && existing.length > 0) {
-        // Update existing record: update somtel_number and ensure active
         customerId = existing[0].id;
         await sbFetch(`${SUPABASE_URL}/rest/v1/customers?id=eq.${customerId}`, {
           method: 'PATCH',
@@ -184,7 +205,6 @@ export default async function handler(req, res) {
           }),
         });
       } else {
-        // Insert new customer record with proper attribution
         const insertResp = await sbFetch(`${SUPABASE_URL}/rest/v1/customers`, {
           method: 'POST',
           headers: { Prefer: 'return=representation' },

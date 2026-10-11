@@ -23,10 +23,13 @@ export default function PremiumFeaturesPage() {
   const [targetOperator, setTargetOperator] = useState<OperatorWithAccess | null>(null)
   const [modalMode, setModalMode] = useState<'grant' | 'suspend' | 'revoke' | null>(null)
   const [paymentReference, setPaymentReference] = useState('')
+  const [zaadNumber, setZaadNumber] = useState('')
+  const [zaadAccountName, setZaadAccountName] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
   const [notes, setNotes] = useState('')
   const [actionReason, setActionReason] = useState('')
   const [saving, setSaving] = useState(false)
+
 
   // History Modal State
   const [historyOperator, setHistoryOperator] = useState<OperatorWithAccess | null>(null)
@@ -86,6 +89,8 @@ export default function PremiumFeaturesPage() {
     setTargetOperator(op)
     setModalMode('grant')
     setPaymentReference(op.feature_access?.payment_reference || '')
+    setZaadNumber((op.feature_access as (OperatorFeatureAccess & { zaad_number?: string | null }) | null)?.zaad_number || '')
+    setZaadAccountName((op.feature_access as (OperatorFeatureAccess & { zaad_account_name?: string | null }) | null)?.zaad_account_name || '')
     setExpiresAt(op.feature_access?.expires_at ? op.feature_access.expires_at.split('T')[0] : '')
     setNotes(op.feature_access?.notes || '')
     setActionReason('')
@@ -117,21 +122,28 @@ export default function PremiumFeaturesPage() {
     } else {
       newStatus = 'active'
       actionType = 'granted'
-      if (!paymentReference.trim()) {
-        toast('Fadlan geli Payment Reference (Tusaale: Zaad Trx ID / Waafi / Kaash)', 'error')
+      if (!zaadNumber.trim()) {
+        toast('Fadlan geli ZAAD Number-ka lacagta (9 digits)', 'error')
+        setSaving(false)
+        return
+      }
+      if (!zaadAccountName.trim()) {
+        toast('Fadlan geli ZAAD Account Name-ka', 'error')
         setSaving(false)
         return
       }
     }
 
+
     try {
       const nowIso = new Date().toISOString()
-      const payload: Partial<OperatorFeatureAccess> = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payload: any = {
         operator_id: opId,
         feature_key: 'registration_via_link',
         status: newStatus,
-        payment_reference: modalMode === 'grant' ? paymentReference.trim() : targetOperator.feature_access?.payment_reference || null,
-        notes: modalMode === 'grant' ? notes.trim() : (actionReason.trim() || targetOperator.feature_access?.notes || null),
+        payment_reference: modalMode === 'grant' ? (paymentReference.trim() || null) : (targetOperator.feature_access?.payment_reference || null),
+        notes: modalMode === 'grant' ? (notes.trim() || null) : (actionReason.trim() || targetOperator.feature_access?.notes || null),
         updated_at: nowIso,
       }
 
@@ -141,17 +153,27 @@ export default function PremiumFeaturesPage() {
         payload.expires_at = expiresAt ? new Date(expiresAt).toISOString() : null
         payload.revoked_at = null
         payload.revoked_by = null
+        // ZAAD payment details (only set when granting)
+        payload.zaad_number = zaadNumber.trim() || null
+        payload.zaad_account_name = zaadAccountName.trim() || null
       } else {
         payload.revoked_at = nowIso
         payload.revoked_by = user.id
       }
 
+
       // Upsert into operator_feature_access
-      const { error: upsertErr } = await supabase
+      const { data: upsertData, error: upsertErr } = await supabase
         .from('operator_feature_access')
         .upsert(payload, { onConflict: 'operator_id,feature_key' })
+        .select()
 
-      if (upsertErr) throw upsertErr
+      console.log('[PremiumFeatures] upsert result:', { upsertData, upsertErr, payload, userId: user.id })
+
+      if (upsertErr) {
+        console.error('[PremiumFeatures] upsert error detail:', JSON.stringify(upsertErr))
+        throw new Error(`${upsertErr.message} (code: ${upsertErr.code})`)
+      }
 
       // Log into operator_feature_history
       try {
@@ -442,19 +464,44 @@ export default function PremiumFeaturesPage() {
             </div>
             <div className="modal-body">
               <div style={{ background: 'var(--bg-secondary)', padding: '12px 16px', borderRadius: 10, marginBottom: 18, fontSize: '0.875rem' }}>
-                ℹ️ <strong>Super Admin Authorization:</strong> Only activate this feature after confirming payment or agreement with the operator. Once activated, the operator can generate public registration links and customers can self-register.
+                ℹ️ <strong>Super Admin Authorization:</strong> Only activate this feature after confirming payment. The ZAAD payment details below will be shown to customers on the public registration page.
               </div>
 
               <div className="form-group">
-                <label className="form-label">Payment Reference * (Required)</label>
+                <label className="form-label">💳 ZAAD Payment Number * (Required)</label>
+                <input
+                  className="form-input"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="e.g. 634284015"
+                  value={zaadNumber}
+                  onChange={e => setZaadNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                  required
+                />
+                <span className="form-hint">9-digit Telesom/ZAAD number. Customers will send payment to this number.</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">👤 ZAAD Account Name * (Required)</label>
+                <input
+                  className="form-input"
+                  placeholder="e.g. Farxaan Maxamed"
+                  value={zaadAccountName}
+                  onChange={e => setZaadAccountName(e.target.value)}
+                  required
+                />
+                <span className="form-hint">The account holder's name displayed to customers when sending payment.</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Payment Reference (Optional)</label>
                 <input
                   className="form-input"
                   placeholder="e.g. ZAAD-TRX-94821 or Cash Payment"
                   value={paymentReference}
                   onChange={e => setPaymentReference(e.target.value)}
-                  required
                 />
-                <span className="form-hint">Record proof of payment or transaction ID.</span>
+                <span className="form-hint">Record proof of payment or transaction ID for your records.</span>
               </div>
 
               <div className="form-group">
@@ -479,6 +526,7 @@ export default function PremiumFeaturesPage() {
                 />
               </div>
             </div>
+
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setTargetOperator(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={saving} onClick={handleConfirmAction}>

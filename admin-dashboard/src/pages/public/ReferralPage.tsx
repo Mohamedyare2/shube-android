@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 
+interface Bundle {
+  slot: number
+  bundle_name: string | null
+  bundle_price: number | null
+}
+
 interface OperatorInfo {
   username: string
   welcome_message: string | null
+  zaad_number: string | null
+  zaad_account_name: string | null
+  bundles: Bundle[]
 }
 
 interface LoadErrorState {
@@ -63,7 +72,7 @@ export default function ReferralPage() {
           setLoadError({
             code: 'INACTIVE',
             title: 'Adeeggan Hadda Ma Shaqaynayo',
-            message: (data?.message as string) || 'Adeegga diiwaangelinta link-ga ee operator-kani hadda ma furna ama waqtigiisii ayaa dhacay. Fadlan la xiriir operator-ka ama maamulaha.',
+            message: (data?.message as string) || 'Adeegga diiwaangelinta link-ga ee operator-kani hadda ma furna ama waqtigiisii ayaa dhacay.',
           })
           setLoading(false)
           return
@@ -82,6 +91,9 @@ export default function ReferralPage() {
         setOperator({
           username: (data.username as string) || cleanCode,
           welcome_message: (data.welcome_message as string) || null,
+          zaad_number: (data.zaad_number as string) || null,
+          zaad_account_name: (data.zaad_account_name as string) || null,
+          bundles: (data.bundles as Bundle[]) || [],
         })
         setLoading(false)
       })
@@ -185,11 +197,26 @@ export default function ReferralPage() {
           <p style={{ color: '#1f2937', lineHeight: 1.7, marginBottom: 12, fontWeight: 500 }}>
             Macluumaadkaaga si guul leh ayaa la helay. Hadda waad sii wadi kartaa tallaabada xigta si aad u hesho xogta internetkaaga.
           </p>
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '14px 18px', textAlign: 'left', marginBottom: 20 }}>
-            <div style={{ fontSize: '0.85rem', color: '#15803d', lineHeight: 1.6 }}>
-              <strong>Registration successful!</strong> Your information has been received. You can now continue with the next steps to receive your data bundle.
+
+          {/* Show ZAAD payment reminder on success */}
+          {operator?.zaad_number && (
+            <div style={{ background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 14, padding: '16px 18px', textAlign: 'left', marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, color: '#166534', marginBottom: 10, fontSize: '0.95rem' }}>
+                💳 Lacagta u dir lambarka hoose (Send Payment To):
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: '#4b5563', fontSize: '0.875rem' }}>ZAAD Number:</span>
+                <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '1.05rem', color: '#166534' }}>
+                  +252 {operator.zaad_number}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#4b5563', fontSize: '0.875rem' }}>Account Name:</span>
+                <span style={{ fontWeight: 700, color: '#166534' }}>{operator.zaad_account_name}</span>
+              </div>
             </div>
-          </div>
+          )}
+
           <div style={{ color: '#6b7280', fontSize: '0.85rem' }}>
             Attributed to operator: <strong>@{operator?.username}</strong>
           </div>
@@ -197,6 +224,8 @@ export default function ReferralPage() {
       </div>
     )
   }
+
+  const validBundles = operator?.bundles?.filter(b => b.bundle_name || b.bundle_price !== null) || []
 
   return (
     <div style={styles.page}>
@@ -209,7 +238,7 @@ export default function ReferralPage() {
             'Ku raaxayso internet degdeg ah oo aad ku kalsoon tahay marka aad u baahato, oo ay xukunto codsiyadeena casriga ah. Buuxi foomka hoose oo ku bilow dhowr ilbiriqsi gudahood.'}
         </p>
         <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.875rem', marginTop: 10, lineHeight: 1.5 }}>
-          Enjoy fast, reliable internet whenever you need it, powered by our modern application. Complete the simple form below and get started in seconds.
+          Enjoy fast, reliable internet whenever you need it, powered by our modern application.
         </p>
       </div>
 
@@ -217,7 +246,7 @@ export default function ReferralPage() {
       <div style={styles.stepsRow}>
         {[
           { icon: '📝', title: '1. Register', desc: 'Geli numberadaada' },
-          { icon: '💳', title: '2. Send Payment', desc: 'Ka dir Telesom/Zaad' },
+          { icon: '💳', title: '2. Send Payment', desc: 'Ka dir ZAAD/Telesom' },
           { icon: '📶', title: '3. Receive Bundle', desc: 'Data-da ku hel Somtel' },
         ].map(s => (
           <div key={s.title} style={styles.step}>
@@ -227,6 +256,77 @@ export default function ReferralPage() {
           </div>
         ))}
       </div>
+
+      {/* ZAAD Payment Details Card */}
+      {operator?.zaad_number && (
+        <div style={{
+          ...styles.card,
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+          border: '2px solid #86efac',
+          textAlign: 'left',
+        }}>
+          <div style={{ fontWeight: 800, color: '#166534', marginBottom: 14, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 22 }}>💳</span>
+            Lacagta u dir lambarka hoose (Send Payment To):
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, padding: '10px 14px', background: 'white', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>ZAAD Number:</span>
+            <span style={{ fontWeight: 800, fontFamily: 'monospace', fontSize: '1.25rem', color: '#166534', letterSpacing: '0.05em' }}>
+              +252 {operator.zaad_number}
+            </span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'white', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+            <span style={{ color: '#6b7280', fontSize: '0.85rem', fontWeight: 600 }}>Account Name:</span>
+            <span style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>{operator.zaad_account_name}</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#4ade80', marginTop: 10, marginBottom: 0 }}>
+            ⚠️ Verify the name matches exactly before confirming your ZAAD payment.
+          </p>
+        </div>
+      )}
+
+      {/* Available Bundles Card */}
+      {validBundles.length > 0 && (
+        <div style={{ ...styles.card, textAlign: 'left' }}>
+          <div style={{ fontWeight: 800, color: '#1f2937', marginBottom: 14, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 22 }}>📦</span>
+            Available Bundles / Xirmooyin La Heli Karo:
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {validBundles.map(b => (
+              <div
+                key={b.slot}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 14px',
+                  background: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 10,
+                }}
+              >
+                <span style={{ fontWeight: 600, color: '#374151', fontSize: '0.9rem' }}>
+                  📶 {b.bundle_name || `Bundle ${b.slot}`}
+                </span>
+                {b.bundle_price !== null && (
+                  <span style={{
+                    fontWeight: 800,
+                    color: '#0ea5e9',
+                    fontFamily: 'monospace',
+                    fontSize: '1.05rem',
+                    background: '#f0f9ff',
+                    padding: '3px 10px',
+                    borderRadius: 8,
+                  }}>
+                    {Number(b.bundle_price).toLocaleString()} SL
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Form Card */}
       <div style={styles.card}>
@@ -377,7 +477,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 560,
     background: 'white',
     borderRadius: 20,
-    padding: '28px 24px',
+    padding: '22px 20px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
     border: '1px solid rgba(0,0,0,0.04)',
     textAlign: 'center',
