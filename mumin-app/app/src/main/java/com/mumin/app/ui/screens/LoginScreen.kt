@@ -49,6 +49,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var pairingCode by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showUrlEdit by remember { mutableStateOf(false) }
@@ -210,6 +211,34 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         shape = RoundedCornerShape(14.dp)
                     )
 
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ── Pairing Code (6-digit) from Website ──────────────────
+                    OutlinedTextField(
+                        value = pairingCode,
+                        onValueChange = {
+                            if (it.length <= 6 && it.all { c -> c.isDigit() }) {
+                                pairingCode = it; errorMessage = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Pairing Code (6-digit)") },
+                        placeholder = { Text("Code-ka Website-ka (tusaale 123456)") },
+                        singleLine = true,
+                        leadingIcon = { Text("🔢", fontSize = 16.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MuminEmeraldPrimary,
+                            unfocusedBorderColor = MuminBorder,
+                            focusedLabelColor = MuminEmeraldPrimary,
+                            unfocusedLabelColor = MuminTextSecondary.copy(alpha = 0.6f),
+                            cursorColor = MuminEmeraldPrimary,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
                     if (errorMessage != null) {
                         Spacer(modifier = Modifier.height(16.dp))
                         Card(
@@ -239,6 +268,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                 errorMessage = "Fadlan geli magaca iyo sirta (username & password)"
                                 return@Button
                             }
+                            if (pairingCode.isNotBlank() && pairingCode.length != 6) {
+                                errorMessage = "Pairing Code-ku waa inuu ahaadaa 6 lambar"
+                                return@Button
+                            }
                             isLoading = true
                             errorMessage = null
 
@@ -253,10 +286,19 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         put("password", password.trim())
                                         put("device_identifier", deviceId)
                                         put("device_name", android.os.Build.MODEL)
+                                        if (pairingCode.isNotBlank()) {
+                                            put("pairing_code", pairingCode.trim())
+                                        }
+                                    }
+
+                                    val endpoint = if (pairingCode.isNotBlank()) {
+                                        "${serverUrl.trimEnd('/')}/api/devices/pair"
+                                    } else {
+                                        "${serverUrl.trimEnd('/')}/api/pair"
                                     }
 
                                     val req = Request.Builder()
-                                        .url("${serverUrl.trimEnd('/')}/api/pair")
+                                        .url(endpoint)
                                         .post(body.toString().toRequestBody(json))
                                         .build()
 
@@ -268,7 +310,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     if (res.isSuccessful) {
                                         val data = JSONObject(resBody)
                                         prefs.baseUrl = serverUrl
-                                        prefs.accessToken = data.optString("token", "logged_in")
+                                        prefs.accessToken = data.optString("token", "paired")
                                         prefs.deviceId = data.optString("device_id", deviceId)
                                         prefs.operatorId = data.optString("operator_id", "")
                                         prefs.profileId = data.optString("profile_id", data.optString("operator_id", ""))
