@@ -18,56 +18,19 @@ export default function MuminLogo({ size = 'md', showWordmark = true, subtitle =
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: size === 'sm' ? 8 : 12 }}>
-      <div
+      <img
+        src="/mumin-logo.png"
+        alt="Mu'min App Logo"
         style={{
           width: px,
           height: px,
           borderRadius: px * 0.28,
-          background: 'linear-gradient(135deg, #064E3B 0%, #065F46 50%, #022C22 100%)',
-          border: '1.5px solid rgba(52, 211, 153, 0.4)',
-          boxShadow: '0 4px 16px rgba(5, 150, 105, 0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
-          overflow: 'hidden',
+          boxShadow: '0 4px 18px rgba(5, 150, 105, 0.4)',
+          border: '1.5px solid rgba(245, 158, 11, 0.45)',
+          objectFit: 'cover',
           flexShrink: 0,
         }}
-      >
-        <svg viewBox="0 0 100 100" width={px * 0.72} height={px * 0.72}>
-          <defs>
-            <linearGradient id="mEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#34D399" />
-              <stop offset="100%" stopColor="#059669" />
-            </linearGradient>
-            <linearGradient id="mGold" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#FDE68A" />
-              <stop offset="100%" stopColor="#F59E0B" />
-            </linearGradient>
-          </defs>
-
-          {/* Golden Crescent Accent */}
-          <path
-            d="M 30 75 C 18 62 18 38 32 25 C 42 16 58 16 68 22 C 60 20 46 22 38 32 C 30 42 32 62 45 72 Z"
-            fill="url(#mGold)"
-            opacity="0.9"
-          />
-
-          {/* Stylized M Pillars */}
-          <rect x="24" y="32" width="10" height="42" rx="5" fill="url(#mEmerald)" />
-          <rect x="66" y="32" width="10" height="42" rx="5" fill="url(#mEmerald)" />
-          <path d="M 29 34 L 50 60 L 50 67 L 29 41 Z" fill="url(#mEmerald)" />
-          <path d="M 71 34 L 50 60 L 50 67 L 71 41 Z" fill="url(#mEmerald)" />
-
-          {/* Golden Locked Node (Represents matched sender & recipient) */}
-          <circle cx="50" cy="62" r="6" fill="url(#mGold)" />
-          <circle cx="50" cy="62" r="2.5" fill="#FFFFFF" />
-
-          {/* WiFi Signals */}
-          <path d="M 40 22 A 14 14 0 0 1 60 22" fill="none" stroke="url(#mGold)" strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M 35 16 A 21 21 0 0 1 65 16" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
-        </svg>
-      </div>
+      />
 
       {showWordmark && (
         <div style={{ display: 'flex', flexDirection: 'column' }}>

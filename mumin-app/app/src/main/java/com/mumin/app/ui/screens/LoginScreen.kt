@@ -90,20 +90,18 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         ) {
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Logo & Title
+            // Dedicated Mu'min App 3D Logo
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(MuminEmeraldLight, MuminEmeraldDark),
-                            start = Offset(0f, 0f), end = Offset(100f, 100f)
-                        )
-                    ),
+                    .size(88.dp)
+                    .clip(RoundedCornerShape(24.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("M", fontSize = 40.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.mumin.app.R.drawable.mumin_logo),
+                    contentDescription = "Mu'min App Logo",
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))

@@ -97,13 +97,16 @@ fun MuminMainScreen(onLogout: () -> Unit = {}) {
         ) {
             Spacer(Modifier.height(30.dp))
 
-            // Mu'min Emerald Header
+            // Dedicated Mu'min App 3D Logo Header
             Box(
-                Modifier.size(76.dp).clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(MuminEmeraldPrimary, MuminEmeraldDark))),
+                Modifier.size(80.dp).clip(RoundedCornerShape(22.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("M", fontSize = 38.sp, fontWeight = FontWeight.Black, color = Color.White)
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.mumin.app.R.drawable.mumin_logo),
+                    contentDescription = "Mu'min App Logo",
+                    modifier = Modifier.fillMaxSize()
+                )
             }
             Spacer(Modifier.height(10.dp))
 
