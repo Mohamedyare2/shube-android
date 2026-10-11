@@ -31,6 +31,14 @@ import DownloadPage from './pages/DownloadPage'
 import ReferralLinkPage from './pages/ReferralLinkPage'
 import ReferralPage from './pages/public/ReferralPage'
 import PremiumFeaturesPage from './pages/PremiumFeaturesPage'
+
+// Mu'min App pages
+import MuminLayout from './pages/mumin/MuminLayout'
+import MuminLoginPage from './pages/mumin/MuminLoginPage'
+import MuminDashboardPage from './pages/mumin/MuminDashboardPage'
+import MuminTransactionsPage from './pages/mumin/MuminTransactionsPage'
+import MuminBundlesPage from './pages/mumin/MuminBundlesPage'
+
 import './index.css'
 
 // Placeholder for remaining pages
@@ -66,6 +74,15 @@ createRoot(document.getElementById('root')!).render(
 
             {/* ── Auth ──────────────────────────────────────── */}
             <Route path="/login" element={<LoginPage />} />
+
+            {/* ── Mu'min App Routes (Dedicated Experience) ──── */}
+            <Route path="/mumin/login" element={<MuminLoginPage />} />
+            <Route path="/mumin" element={<MuminLayout />}>
+              <Route index element={<MuminDashboardPage />} />
+              <Route path="dashboard" element={<MuminDashboardPage />} />
+              <Route path="transactions" element={<MuminTransactionsPage />} />
+              <Route path="bundles" element={<MuminBundlesPage />} />
+            </Route>
 
             {/* ── Protected dashboard routes ────────────────── */}
             <Route element={<AppLayout />}>

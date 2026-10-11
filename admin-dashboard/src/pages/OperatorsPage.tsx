@@ -9,10 +9,10 @@ interface OperatorWithProfile extends Operator {
   profile: Profile
   device_count?: number
   transaction_count?: number
-  app_type?: 'shube' | 'geesh'
+  app_type?: 'shube' | 'geesh' | 'mumin'
 }
 
-type AppTab = 'shube' | 'geesh'
+type AppTab = 'shube' | 'geesh' | 'mumin'
 
 export default function OperatorsPage() {
   const { toast } = useToast()
@@ -249,8 +249,10 @@ export default function OperatorsPage() {
 
   const shubCount = operators.filter(op => (op.app_type || 'shube') === 'shube').length
   const geeshCount = operators.filter(op => op.app_type === 'geesh').length
+  const muminCount = operators.filter(op => op.app_type === 'mumin').length
 
   const isGeesh = activeTab === 'geesh'
+  const isMumin = activeTab === 'mumin'
 
   return (
     <div className="page-container">
@@ -261,12 +263,12 @@ export default function OperatorsPage() {
           <p className="page-subtitle">Manage all operator accounts</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}>
-          + {isGeesh ? 'Create Sarif Operator' : 'Create Operator'}
+          + {isGeesh ? 'Create Sarif Operator' : isMumin ? 'Create Mu\'min Operator' : 'Create Operator'}
         </button>
       </div>
 
       {/* ── Tab Switcher ─────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 'var(--space-4)', borderBottom: '2px solid var(--border-subtle)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 'var(--space-4)', borderBottom: '2px solid var(--border-subtle)', flexWrap: 'wrap' }}>
         <button
           onClick={() => setActiveTab('shube')}
           style={{
@@ -285,7 +287,7 @@ export default function OperatorsPage() {
             transition: 'all 0.15s ease',
           }}
         >
-          📱 Operator App
+          📱 Shube Operator
           <span style={{
             background: activeTab === 'shube' ? 'var(--brand-primary)' : 'var(--bg-surface-2)',
             color: activeTab === 'shube' ? '#fff' : 'var(--text-muted)',
@@ -302,9 +304,9 @@ export default function OperatorsPage() {
             padding: 'var(--space-3) var(--space-5)',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'geesh' ? '2px solid var(--brand-success)' : '2px solid transparent',
+            borderBottom: activeTab === 'geesh' ? '2px solid var(--brand-purple)' : '2px solid transparent',
             marginBottom: -2,
-            color: activeTab === 'geesh' ? 'var(--brand-success)' : 'var(--text-muted)',
+            color: activeTab === 'geesh' ? 'var(--brand-purple)' : 'var(--text-muted)',
             fontWeight: activeTab === 'geesh' ? 700 : 400,
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -314,15 +316,44 @@ export default function OperatorsPage() {
             transition: 'all 0.15s ease',
           }}
         >
-          💱 Sarif Operator
+          💱 Geesh Operator
           <span style={{
-            background: activeTab === 'geesh' ? 'var(--brand-success)' : 'var(--bg-surface-2)',
+            background: activeTab === 'geesh' ? 'var(--brand-purple)' : 'var(--bg-surface-2)',
             color: activeTab === 'geesh' ? '#fff' : 'var(--text-muted)',
             borderRadius: 99,
             padding: '1px 8px',
             fontSize: '0.75rem',
             fontWeight: 600,
           }}>{geeshCount}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mumin')}
+          style={{
+            padding: 'var(--space-3) var(--space-5)',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'mumin' ? '2px solid #10B981' : '2px solid transparent',
+            marginBottom: -2,
+            color: activeTab === 'mumin' ? '#10B981' : 'var(--text-muted)',
+            fontWeight: activeTab === 'mumin' ? 700 : 400,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          ✨ Mu'min Operator
+          <span style={{
+            background: activeTab === 'mumin' ? '#10B981' : 'var(--bg-surface-2)',
+            color: activeTab === 'mumin' ? '#fff' : 'var(--text-muted)',
+            borderRadius: 99,
+            padding: '1px 8px',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+          }}>{muminCount}</span>
         </button>
       </div>
 

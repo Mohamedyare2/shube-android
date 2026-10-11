@@ -48,9 +48,7 @@ export default function DashboardPage() {
     const opId = operatorRow?.id
     if (isOperator && !opId) return
 
-    const startOfToday = new Date()
-    startOfToday.setHours(0, 0, 0, 0)
-    const fromDate = startOfToday.toISOString()
+    const fromDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
     let statsData
     if (isOperator && opId) {
@@ -105,8 +103,14 @@ export default function DashboardPage() {
       setChartData(Object.entries(byDay).map(([name, v]) => ({ name, ...v })))
     }
 
+    // Refresh card balance to reflect any deductions
+    if (isOperator) {
+      supabase.from('operators').select('id, card_balance').eq('profile_id', user?.id).single()
+        .then(({ data }) => { if (data) setOperatorRow(data as OperatorRow) })
+    }
+
     setLoading(false)
-  }, [isOperator, operatorRow?.id])
+  }, [isOperator, operatorRow?.id, user?.id])
 
   useEffect(() => {
     loadData()
@@ -170,7 +174,7 @@ export default function DashboardPage() {
   const statCards = [
     {
       icon: '📊',
-      label: "Today's Transactions",
+      label: "Last 24h Transactions",
       value: formatNumber(totalToday),
       gradient: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
       bg: 'rgba(59,130,246,0.08)',
@@ -180,7 +184,7 @@ export default function DashboardPage() {
     },
     {
       icon: '✅',
-      label: "Today's Success",
+      label: "Last 24h Success",
       value: formatNumber(stats?.success ?? 0),
       gradient: 'linear-gradient(135deg, #22c55e 0%, #10b981 100%)',
       bg: 'rgba(34,197,94,0.08)',
@@ -191,7 +195,7 @@ export default function DashboardPage() {
     },
     {
       icon: '❌',
-      label: "Today's Failed",
+      label: "Last 24h Failed",
       value: formatNumber(stats?.failed ?? 0),
       gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
       bg: 'rgba(239,68,68,0.08)',
@@ -213,7 +217,7 @@ export default function DashboardPage() {
     },
     {
       icon: '💰',
-      label: "Today's Processed",
+      label: "Last 24h Processed",
       value: formatSLS(stats?.total_sls_processed ?? 0),
       gradient: 'linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%)',
       bg: 'rgba(20,184,166,0.08)',

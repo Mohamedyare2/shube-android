@@ -56,6 +56,30 @@ const geeshFeatures = [
   },
 ]
 
+const muminFeatures = [
+  {
+    emoji: '🎯',
+    title: 'Direct Same-Number Delivery',
+    desc: 'The data bundle recipient is automatically and strictly identical to the payment-sending phone number.',
+  },
+  {
+    emoji: '🛡️',
+    title: 'Zero Recipient Mismatches',
+    desc: 'Completely eliminates wrong recipient entries and customer input errors with locked matching.',
+  },
+  {
+    emoji: '⚡',
+    title: 'Automated USSD Execution',
+    desc: 'Generates and dials the exact USSD code with operator-assigned bundles in seconds.',
+  },
+  {
+    emoji: '📱',
+    title: 'Web PWA & Android Ready',
+    desc: 'Accessible instantly as an installable mobile PWA web application and native Android gateway.',
+  },
+]
+
+
 export default function HomePage() {
   return (
     <div className="pub-page">
@@ -87,6 +111,7 @@ export default function HomePage() {
           </div>
 
           {/* App badges */}
+          {/* App badges */}
           <div className="pub-hero-apps">
             <div className="pub-app-badge">
               <div className="pub-app-badge-icon pub-app-badge-icon--blue">S</div>
@@ -103,6 +128,14 @@ export default function HomePage() {
                 <div className="pub-app-badge-desc">Auto Money Transfer</div>
               </div>
             </div>
+            <div className="pub-hero-plus">+</div>
+            <div className="pub-app-badge">
+              <div className="pub-app-badge-icon pub-app-badge-icon--green">M</div>
+              <div>
+                <div className="pub-app-badge-name">Mu'min App</div>
+                <div className="pub-app-badge-desc">Direct Data Gateway</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -111,7 +144,7 @@ export default function HomePage() {
       <section className="pub-stats-bar">
         <div className="pub-container pub-stats-inner">
           {[
-            { value: '2', label: 'Mobile Apps' },
+            { value: '3', label: 'Mobile Apps' },
             { value: '100%', label: 'Automated' },
             { value: '24/7', label: 'Always Running' },
             { value: '0', label: 'Manual Steps' },
@@ -195,6 +228,50 @@ export default function HomePage() {
                 <div key={f.title} className="pub-feature-card pub-feature-card--purple">
                   <div className="pub-feature-emoji">{f.emoji}</div>
                   <h3 className="pub-feature-title">{f.title}</h3>
+                  <p className="pub-feature-desc">{f.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── MU'MIN APP ─────────────────────────────────────────── */}
+      <section className="pub-section pub-section--alt">
+        <div className="pub-container">
+          <div className="pub-section-eyebrow">📱 Application 3</div>
+          <div className="pub-two-col">
+            <div className="pub-two-col-text">
+              <div className="pub-app-title-row">
+                <div className="pub-app-icon pub-app-icon--green">M</div>
+                <div>
+                  <h2 className="pub-section-title">Mu'min App</h2>
+                  <p className="pub-section-sub">Direct-Recipient Data Gateway</p>
+                </div>
+              </div>
+              <p className="pub-section-desc">
+                Mu'min App is designed for automated data fulfillment where the data bundle is
+                automatically and strictly delivered to the exact phone number that sent the payment.
+                No separate recipient entry, no human guesswork, and zero customer mismatches.
+              </p>
+              <p className="pub-section-desc">
+                Available both as an instant installable Mobile Web App (PWA) and an automated Android
+                gateway app.
+              </p>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Link to="/mumin" className="pub-btn pub-btn-emerald">
+                  🚀 Launch Mu'min Web App
+                </Link>
+                <Link to="/downloads" className="pub-btn pub-btn-ghost">
+                  Download Mu'min APK ⬇
+                </Link>
+              </div>
+            </div>
+            <div className="pub-features-grid pub-features-grid--2">
+              {muminFeatures.map(f => (
+                <div key={f.title} className="pub-feature-card" style={{ borderColor: 'rgba(16, 185, 129, 0.25)', background: 'rgba(6, 78, 59, 0.15)' }}>
+                  <div className="pub-feature-emoji">{f.emoji}</div>
+                  <h3 className="pub-feature-title" style={{ color: '#A7F3D0' }}>{f.title}</h3>
                   <p className="pub-feature-desc">{f.desc}</p>
                 </div>
               ))}

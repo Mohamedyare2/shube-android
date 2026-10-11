@@ -1873,6 +1873,14 @@ tr:hover td { background: var(--bg-surface-2); }
   background: hsl(258, 90%, 55%);
   box-shadow: 0 0 20px rgba(167, 139, 250, 0.3);
 }
+.pub-btn-emerald {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+.pub-btn-emerald:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
 .pub-btn-ghost {
   background: rgba(255, 255, 255, 0.1);
   color: white;
@@ -2086,6 +2094,8 @@ tr:hover td { background: var(--bg-surface-2); }
 .pub-app-icon--lg { width: 80px; height: 80px; font-size: 2.5rem; }
 .pub-app-icon--blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4); }
 .pub-app-icon--purple { background: linear-gradient(135deg, #a78bfa, #7c3aed); box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4); }
+.pub-app-icon--green { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 10px 25px rgba(5, 150, 105, 0.4); }
+
 
 .pub-features-grid {
   display: grid;

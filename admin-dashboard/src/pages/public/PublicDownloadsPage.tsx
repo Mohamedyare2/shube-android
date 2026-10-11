@@ -41,6 +41,28 @@ const apps = [
     btnClass: 'pub-btn-purple',
     requirements: 'Android 8.0 (Oreo) or higher — Accessibility Service required',
   },
+  {
+    id: 'mumin',
+    icon: 'M',
+    iconClass: 'pub-app-icon--green',
+    name: "Mu'min App",
+    version: 'Latest',
+    subtitle: 'Direct-Recipient Data Gateway',
+    description:
+      "Mu'min App is an automated data fulfillment platform where data bundles are automatically delivered to the exact phone number that sent the payment — eliminating recipient mismatch and manual customer entry.",
+    features: [
+      'Automatic same-number recipient matching',
+      'Zero mismatch: recipient is strictly the payment sender',
+      'Direct USSD code generation & automated dialing',
+      'Real-time balance & transaction tracking',
+      'Available as Mobile Web App (PWA) & Android APK',
+    ],
+    apkUrl: '/downloads/mumin-latest.apk',
+    webAppUrl: '/mumin',
+    fileSize: '~23.5 MB',
+    btnClass: 'pub-btn-emerald',
+    requirements: 'Android 8.0 or any modern mobile browser (PWA supported)',
+  },
 ]
 
 export default function PublicDownloadsPage() {
@@ -54,10 +76,10 @@ export default function PublicDownloadsPage() {
           <div className="pub-hero-blob pub-hero-blob-3" />
         </div>
         <div className="pub-container pub-page-hero-inner">
-          <div className="pub-section-eyebrow">⬇ Downloads</div>
+          <div className="pub-section-eyebrow">⬇ Downloads & Web Apps</div>
           <h1 className="pub-page-hero-title">Download Our Apps</h1>
           <p className="pub-page-hero-sub">
-            Both apps are free to download. No account required.
+            Free to download and access. Designed for mobile money operators across Somaliland & Somalia.
           </p>
         </div>
       </section>
@@ -93,14 +115,25 @@ export default function PublicDownloadsPage() {
                   ))}
                 </ul>
 
-                <div className="pub-download-card-footer">
+                <div className="pub-download-card-footer" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <a
                     href={app.apkUrl}
                     download
                     className={`pub-btn pub-btn-lg pub-btn-block ${app.btnClass}`}
                   >
-                    ⬇ Download {app.name}
+                    ⬇ Download {app.name} APK
                   </a>
+
+                  {app.webAppUrl && (
+                    <a
+                      href={app.webAppUrl}
+                      className="pub-btn pub-btn-ghost pub-btn-block"
+                      style={{ border: '1px solid rgba(52, 211, 153, 0.4)', color: '#34D399', fontWeight: 700 }}
+                    >
+                      🚀 Launch Mu'min Web App / PWA
+                    </a>
+                  )}
+
                   <div className="pub-requirements">
                     📋 {app.requirements}
                   </div>
