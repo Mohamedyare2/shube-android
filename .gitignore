@@ -1,11 +1,10 @@
 # Android build files
-android/.gradle/
-android/app/build/
+**/.gradle/
+**/build/
 android/local.properties
 android/captures/
 android/.cxx/
 android/.idea/
-android/build/
 **/*.hprof
 
 # Admin dashboard

@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -34,3 +36,12 @@ jobs:
         with:
           name: Shube-App-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Commit and Push APK
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          cp android/app/build/outputs/apk/debug/app-debug.apk admin-dashboard/public/downloads/shube-latest.apk
+          git add admin-dashboard/public/downloads/shube-latest.apk
+          git commit -m "chore: auto-build Shube APK [skip ci]" || echo "No changes to commit"
+          git push
