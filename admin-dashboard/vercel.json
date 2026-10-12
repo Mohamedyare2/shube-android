@@ -1,6 +1,21 @@
 {
   "buildCommand": "npm install && npm run build",
   "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/downloads/(.*\\.apk)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/register/:code",
@@ -15,7 +30,11 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!api|downloads).*)",
+      "source": "/downloads/(.*\\..*)",
+      "destination": "/downloads/$1"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
