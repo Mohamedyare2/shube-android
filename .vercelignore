@@ -1,0 +1,11 @@
+android/
+geesh-app/
+mumin-app/
+somaliland-keyboard/
+admin-api/
+supabase/
+.git/
+**/.gradle/
+**/build/
+admin-dashboard/node_modules/
+admin-dashboard/dist/

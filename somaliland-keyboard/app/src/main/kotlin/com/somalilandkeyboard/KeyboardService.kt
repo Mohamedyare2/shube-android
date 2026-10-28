@@ -1,22 +1,36 @@
 package com.somalilandkeyboard
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
 import android.inputmethodservice.KeyboardView
+import android.net.Uri
+import android.os.Build
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import androidx.core.view.inputmethod.EditorInfoCompat
+import androidx.core.view.inputmethod.InputConnectionCompat
+import androidx.core.view.inputmethod.InputContentInfoCompat
 import com.somalilandkeyboard.data.FlagData
 import com.somalilandkeyboard.data.FlagItem
+import java.io.File
+import java.io.FileOutputStream
+import java.io.InputStream
 
 @Suppress("DEPRECATION")
 class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListener {
@@ -157,7 +171,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                 val card = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
-                    setPadding(12, 12, 12, 12)
+                    setPadding(10, 10, 10, 10)
                     setBackgroundColor(Color.parseColor("#1E293B"))
                     val params = GridLayout.LayoutParams().apply {
                         width = 0
@@ -169,15 +183,10 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                 }
 
                 if (item.drawableResName.isNotEmpty()) {
-                    // Custom high-res flag (Somaliland)
+                    // Custom curved waving flag (Somaliland)
                     val iv = ImageView(this).apply {
-                        val resId = resources.getIdentifier(item.drawableResName, "drawable", packageName)
-                        if (resId != 0) {
-                            setImageDrawable(ContextCompat.getDrawable(this@KeyboardService, resId))
-                        } else {
-                            setImageResource(R.drawable.flag_somaliland)
-                        }
-                        layoutParams = LinearLayout.LayoutParams(110, 70).apply {
+                        setImageResource(R.drawable.flag_somaliland)
+                        layoutParams = LinearLayout.LayoutParams(110, 75).apply {
                             gravity = Gravity.CENTER_HORIZONTAL
                         }
                         scaleType = ImageView.ScaleType.FIT_CENTER
@@ -188,7 +197,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         textSize = 11f
                         setTextColor(Color.parseColor("#38BDF8"))
                         gravity = Gravity.CENTER
-                        setPadding(0, 6, 0, 0)
+                        setPadding(0, 4, 0, 0)
                         maxLines = 1
                     }
 
@@ -204,7 +213,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                     card.addView(badge)
 
                     card.setOnClickListener {
-                        handleSomalilandSelection()
+                        sendSomalilandFlagSticker()
                     }
                 } else if (item.emoji != null) {
                     val tvEmoji = TextView(this).apply {
@@ -246,16 +255,66 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
         })
     }
 
-    private fun handleSomalilandSelection() {
-        // 1. Commit text representation
-        commitText("🏳️ Somaliland")
+    /**
+     * Sends the authentic waving Somaliland flag as an actual rich image sticker into
+     * Telegram, WhatsApp, Messenger, Google Messages, etc. via Android commitContent API!
+     */
+    private fun sendSomalilandFlagSticker() {
+        val editorInfo = currentInputEditorInfo ?: return
+        val ic = currentInputConnection ?: return
 
-        // 2. Put text and flag description on clipboard
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Somaliland Flag", "Jamhuuriyadda Somaliland 🇸🇱")
-        cm.setPrimaryClip(clip)
+        try {
+            // 1. Prepare sticker image in cache directory
+            val stickersDir = File(cacheDir, "stickers").apply { if (!exists()) mkdirs() }
+            val stickerFile = File(stickersDir, "somaliland_flag.png")
 
-        Toast.makeText(this, getString(R.string.somaliland_flag_copied), Toast.LENGTH_SHORT).show()
+            // Always write clean copy of the curved waving flag PNG
+            val bitmap = BitmapFactory.decodeResource(resources, R.drawable.flag_somaliland)
+            FileOutputStream(stickerFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+
+            // 2. Obtain content URI via FileProvider
+            val contentUri = FileProvider.getUriForFile(
+                this,
+                "com.somalilandkeyboard.fileprovider",
+                stickerFile
+            )
+
+            // 3. Check if target app supports image/png rich content (like Telegram, WhatsApp, etc.)
+            val mimeTypes = EditorInfoCompat.getContentMimeTypes(editorInfo)
+            val supportsPng = mimeTypes.any { it.equals("image/png", ignoreCase = true) || it.equals("image/*", ignoreCase = true) }
+
+            var committed = false
+            if (supportsPng || mimeTypes.isNotEmpty()) {
+                val description = ClipDescription("Somaliland Flag Sticker", arrayOf("image/png"))
+                val contentInfo = InputContentInfoCompat(contentUri, description, null)
+
+                var flags = 0
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+                    flags = flags or InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION
+                }
+
+                committed = InputConnectionCompat.commitContent(ic, editorInfo, contentInfo, flags, null)
+            }
+
+            // 4. Also put the actual sticker image on system clipboard so paste works anywhere
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newUri(contentResolver, "Somaliland Flag", contentUri)
+            cm.setPrimaryClip(clip)
+
+            if (committed) {
+                Toast.makeText(this, "Sticker-ka Calanka Somaliland waa la diray! 🇸🇱", Toast.LENGTH_SHORT).show()
+            } else {
+                // If the app doesn't support direct inline sticker insertion, grant permission and notify
+                grantUriPermission(editorInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                Toast.makeText(this, "Calanka Somaliland waa diyaar! Riix Paste si aad u dirtid.", Toast.LENGTH_SHORT).show()
+            }
+
+        } catch (e: Exception) {
+            Log.e("KeyboardService", "Error sending flag sticker", e)
+            Toast.makeText(this, "Calanka Somaliland: Waad diri kartaa.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onPress(primaryCode: Int) {}

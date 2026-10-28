@@ -398,7 +398,9 @@ export default function DownloadPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-2)' }}>
-              <div style={{ fontSize: '3rem' }}>🇸🇱</div>
+              <div style={{ width: 64, height: 64, borderRadius: 12, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,153,0,0.1)' }}>
+                <img src="/somaliland-waving-flag.png" alt="Somaliland Flag" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                   <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: 800 }}>

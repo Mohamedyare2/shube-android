@@ -1,4 +1,21 @@
-const apps = [
+interface AppDownload {
+  id: string
+  icon: string
+  iconImage?: string
+  iconClass: string
+  name: string
+  version: string
+  subtitle: string
+  description: string
+  features: string[]
+  apkUrl: string
+  webAppUrl?: string
+  fileSize: string
+  btnClass: string
+  requirements: string
+}
+
+const apps: AppDownload[] = [
   {
     id: 'shube',
     icon: 'S',
@@ -66,18 +83,19 @@ const apps = [
   {
     id: 'somaliland-keyboard',
     icon: '🇸🇱',
+    iconImage: '/somaliland-waving-flag.png',
     iconClass: 'pub-app-icon--keyboard',
     name: 'Somaliland Keyboard',
     version: '1.0.0',
     subtitle: 'Searchable Somaliland Flag · Emoji · Stickers',
     description:
-      'A modern, privacy-first Android keyboard featuring the Somaliland flag as a first-class searchable sticker. Type "Somaliland" in the flag search to instantly find and share the flag. Includes emoji, stickers, and a premium navy-blue UI with light & dark modes.',
+      'A modern, privacy-first Android keyboard featuring the curved Somaliland flag as a first-class searchable sticker. Type "Somaliland" in the flag search to instantly find and send the waving flag sticker. Includes emoji, 16 country flags, and a premium navy-blue UI.',
     features: [
-      '🏳️ Somaliland flag sticker — searchable instantly',
+      '🏳️ Curved waving Somaliland flag sticker — searchable instantly',
       'Full QWERTY keyboard with Somali & English layouts',
-      'Emoji panel with 30+ commonly used emoji',
-      '16 country flags including Somalia, UAE, Turkey',
-      'Privacy-first: no keylogging, works 100% offline',
+      'Rich image sticker insertion for Telegram, WhatsApp & Messages',
+      '16 country flags with authentic waving emoji style',
+      'Privacy-first: zero keylogging, works 100% offline',
     ],
     apkUrl: '/downloads/somaliland-keyboard-latest.apk',
     fileSize: '5.9 MB',
@@ -97,10 +115,10 @@ export default function PublicDownloadsPage() {
           <div className="pub-hero-blob pub-hero-blob-3" />
         </div>
         <div className="pub-container pub-page-hero-inner">
-          <div className="pub-section-eyebrow">⬇ Downloads & Web Apps</div>
+          <div className="pub-section-eyebrow">⬇ Downloads &amp; Web Apps</div>
           <h1 className="pub-page-hero-title">Download Our Apps</h1>
           <p className="pub-page-hero-sub">
-            Free to download and access. Designed for mobile money operators across Somaliland & Somalia.
+            Free to download and access. Designed for mobile money operators across Somaliland &amp; Somalia.
           </p>
         </div>
       </section>
@@ -112,8 +130,25 @@ export default function PublicDownloadsPage() {
             {apps.map(app => (
               <div key={app.id} className="pub-download-card">
                 <div className="pub-download-card-header">
-                  <div className={`pub-app-icon pub-app-icon--lg ${app.iconClass}`}>
-                    {app.icon}
+                  <div
+                    className={`pub-app-icon pub-app-icon--lg ${app.iconClass}`}
+                    style={{
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: app.iconImage ? '6px' : 0
+                    }}
+                  >
+                    {app.iconImage ? (
+                      <img
+                        src={app.iconImage}
+                        alt={app.name}
+                        style={{ width: '92%', height: '92%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      app.icon
+                    )}
                   </div>
                   <div>
                     <h2 className="pub-download-card-name">{app.name}</h2>
