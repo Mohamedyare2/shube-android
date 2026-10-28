@@ -121,7 +121,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
         grid.removeAllViews()
 
         val emojis = listOf(
-            "😀", "😃", "😄", "😁", "😆", "😅",
+            "🟩⬜⭐🟥", "💚🤍⭐❤️", "😀", "😃", "😄", "😁",
             "😂", "🤣", "😊", "😇", "🙂", "🙃",
             "😉", "😌", "😍", "🥰", "😘", "😗",
             "😋", "😛", "😜", "🤪", "😝", "🤑",
@@ -186,7 +186,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                     // Custom curved waving flag (Somaliland)
                     val iv = ImageView(this).apply {
                         setImageResource(R.drawable.flag_somaliland)
-                        layoutParams = LinearLayout.LayoutParams(110, 75).apply {
+                        layoutParams = LinearLayout.LayoutParams(110, 65).apply {
                             gravity = Gravity.CENTER_HORIZONTAL
                         }
                         scaleType = ImageView.ScaleType.FIT_CENTER
@@ -197,23 +197,76 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         textSize = 11f
                         setTextColor(Color.parseColor("#38BDF8"))
                         gravity = Gravity.CENTER
-                        setPadding(0, 4, 0, 0)
+                        setPadding(0, 2, 0, 0)
                         maxLines = 1
                     }
 
-                    val badge = TextView(this).apply {
-                        text = "⭐ FEATURED"
-                        textSize = 8f
-                        setTextColor(Color.parseColor("#34D399"))
+                    val emojiPreview = TextView(this).apply {
+                        text = item.emoji ?: "🟩⬜⭐🟥"
+                        textSize = 11f
                         gravity = Gravity.CENTER
+                        setPadding(0, 1, 0, 2)
                     }
+
+                    // Compact action row with [ ✍️ Qor ] and [ 🖼️ Sticker ]
+                    val actionRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT
+                        )
+                    }
+
+                    val btnText = TextView(this).apply {
+                        text = "✍️ Qor"
+                        textSize = 9f
+                        setTextColor(Color.WHITE)
+                        setBackgroundColor(Color.parseColor("#2563EB"))
+                        setPadding(6, 4, 6, 4)
+                        gravity = Gravity.CENTER
+                        val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            setMargins(2, 2, 2, 2)
+                        }
+                        layoutParams = lp
+                        setOnClickListener {
+                            commitText(item.emoji ?: "🟩⬜⭐🟥")
+                        }
+                    }
+
+                    val btnSticker = TextView(this).apply {
+                        text = "🖼️ Sticker"
+                        textSize = 9f
+                        setTextColor(Color.WHITE)
+                        setBackgroundColor(Color.parseColor("#059669"))
+                        setPadding(6, 4, 6, 4)
+                        gravity = Gravity.CENTER
+                        val lp = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                            setMargins(2, 2, 2, 2)
+                        }
+                        layoutParams = lp
+                        setOnClickListener {
+                            sendSomalilandFlagSticker()
+                        }
+                    }
+
+                    actionRow.addView(btnText)
+                    actionRow.addView(btnSticker)
 
                     card.addView(iv)
                     card.addView(nameLabel)
-                    card.addView(badge)
+                    card.addView(emojiPreview)
+                    card.addView(actionRow)
 
+                    // Primary tap: ALWAYS commit the flag into the text input field!
                     card.setOnClickListener {
+                        commitText(item.emoji ?: "🟩⬜⭐🟥")
+                    }
+
+                    // Long press: send or copy rich HD waving flag sticker
+                    card.setOnLongClickListener {
                         sendSomalilandFlagSticker()
+                        true
                     }
                 } else if (item.emoji != null) {
                     val tvEmoji = TextView(this).apply {
