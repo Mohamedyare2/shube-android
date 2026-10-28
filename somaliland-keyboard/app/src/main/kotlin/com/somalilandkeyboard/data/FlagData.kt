@@ -31,19 +31,7 @@ object FlagData {
                 "laascaanood",
             ),
             drawableResName = "flag_somaliland",
-            emoji = "🟩⬜⭐🟥",
-        ),
-        FlagItem(
-            id = "somaliland_hearts",
-            name = "Somaliland (Hearts)",
-            aliases = listOf(
-                "somaliland hearts",
-                "somaliland love",
-                "calanka somaliland",
-                "somaliland flag",
-            ),
-            drawableResName = "",
-            emoji = "💚🤍⭐❤️",
+            emoji = null,
         ),
         // ══ Regional & nearby flags ══
         FlagItem(id = "so", name = "Somalia", aliases = listOf("somalia", "so", "muqdisho", "mogadishu"), drawableResName = "", emoji = "🇸🇴"),
