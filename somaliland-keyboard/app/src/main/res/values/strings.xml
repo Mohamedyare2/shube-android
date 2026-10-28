@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Somaliland Keyboard</string>
+    <string name="keyboard_name">Somaliland Keyboard</string>
+    <string name="enable_keyboard">Daar Keyboard-ka (Enable)</string>
+    <string name="select_keyboard">Dooro Keyboard-ka (Select)</string>
+    <string name="search_flag_hint">Raadi calan (tusaale: Somaliland)...</string>
+    <string name="somaliland_flag_copied">Calanka Somaliland waa la koobiyeeyay!</string>
+    <string name="step1_title">Tallaabada 1: Daar Somaliland Keyboard</string>
+    <string name="step1_desc">Riix badhanka hoose, raadi \'Somaliland Keyboard\', kadibna shid (Turn ON).</string>
+    <string name="step2_title">Tallaabada 2: U dooro Keyboard-ka Koowaad</string>
+    <string name="step2_desc">Kadib markaad shido, riix badhanka oo u dooro \'Somaliland Keyboard\'.</string>
+    <string name="step3_title">Tallaabada 3: Hel Calanka Somaliland 🏳️</string>
+    <string name="step3_desc">App kasta markaad furto, riix astaanta Calanka (🏳️) oo ku qor \'Somaliland\'!</string>
+</resources>

@@ -2095,6 +2095,18 @@ tr:hover td { background: var(--bg-surface-2); }
 .pub-app-icon--blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4); }
 .pub-app-icon--purple { background: linear-gradient(135deg, #a78bfa, #7c3aed); box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4); }
 .pub-app-icon--green { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 10px 25px rgba(5, 150, 105, 0.4); }
+.pub-app-icon--keyboard { background: linear-gradient(135deg, #009900 0%, #006600 40%, #CE1126 100%); box-shadow: 0 10px 25px rgba(0, 153, 0, 0.5); border: 3px solid rgba(255,255,255,0.15); }
+
+/* Keyboard app button */
+.pub-btn-keyboard {
+  background: linear-gradient(135deg, #009900, #006600);
+  color: white;
+  border: 2px solid rgba(255,255,255,0.2);
+}
+.pub-btn-keyboard:hover {
+  background: linear-gradient(135deg, #00b300, #009900);
+  box-shadow: 0 0 20px rgba(0, 153, 0, 0.5);
+}
 
 
 .pub-features-grid {

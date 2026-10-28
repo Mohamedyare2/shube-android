@@ -63,6 +63,27 @@ const apps = [
     btnClass: 'pub-btn-emerald',
     requirements: 'Android 8.0 or any modern mobile browser (PWA supported)',
   },
+  {
+    id: 'somaliland-keyboard',
+    icon: '🇸🇱',
+    iconClass: 'pub-app-icon--keyboard',
+    name: 'Somaliland Keyboard',
+    version: '1.0.0',
+    subtitle: 'Searchable Somaliland Flag · Emoji · Stickers',
+    description:
+      'A modern, privacy-first Android keyboard featuring the Somaliland flag as a first-class searchable sticker. Type "Somaliland" in the flag search to instantly find and share the flag. Includes emoji, stickers, and a premium navy-blue UI with light & dark modes.',
+    features: [
+      '🏳️ Somaliland flag sticker — searchable instantly',
+      'Full QWERTY keyboard with Somali & English layouts',
+      'Emoji panel with 30+ commonly used emoji',
+      '16 country flags including Somalia, UAE, Turkey',
+      'Privacy-first: no keylogging, works 100% offline',
+    ],
+    apkUrl: '/downloads/somaliland-keyboard-latest.apk',
+    fileSize: '~4 MB',
+    btnClass: 'pub-btn-keyboard',
+    requirements: 'Android 7.0 (Nougat) or higher',
+  },
 ]
 
 export default function PublicDownloadsPage() {

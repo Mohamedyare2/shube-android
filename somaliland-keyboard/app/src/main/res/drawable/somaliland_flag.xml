@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="192dp"
+    android:height="128dp"
+    android:viewportWidth="192"
+    android:viewportHeight="128">
+
+    <!-- Green stripe (top 1/3) -->
+    <path android:fillColor="#009900" android:pathData="M0,0 H192 V42.67 H0 Z"/>
+    <!-- White stripe (middle 1/3) -->
+    <path android:fillColor="#FFFFFF" android:pathData="M0,42.67 H192 V85.34 H0 Z"/>
+    <!-- Red stripe (bottom 1/3) -->
+    <path android:fillColor="#CE1126" android:pathData="M0,85.34 H192 V128 H0 Z"/>
+
+    <!-- 5-pointed Black Star at center of white band (cx=96, cy=64) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M96.00,50.00
+                          L98.94,58.97
+                          L108.33,58.97
+                          L100.69,64.53
+                          L103.63,73.51
+                          L96.00,67.94
+                          L88.37,73.51
+                          L91.31,64.53
+                          L83.67,58.97
+                          L93.06,58.97 Z"/>
+
+    <!-- Shahada text in green stripe - stylized white calligraphic shapes -->
+    <!-- Main horizontal baseline -->
+    <path android:fillColor="#FFFFFF"
+          android:pathData="M34,19 Q96,15 158,19 Q158,23 96,25 Q34,23 34,19 Z"/>
+
+    <!-- Right cluster - Allah -->
+    <path android:fillColor="#009900"
+          android:pathData="M140,15 L143,13 L145,15 L144,19 L142,20 L140,19 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M132,14 L135,12 L137,14 L136,18 L134,19 L132,18 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M125,16 Q127,13 130,14 L130,18 Q128,19 126,18 Z"/>
+
+    <!-- Middle - Muhammad -->
+    <path android:fillColor="#009900"
+          android:pathData="M88,15 Q91,12 94,14 L93,18 Q91,19 89,18 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M96,14 Q99,12 101,14 L100,17 Q98,18 97,17 Z"/>
+
+    <!-- Left - la ilaha illa -->
+    <path android:fillColor="#009900"
+          android:pathData="M50,15 L52,13 L55,13 L57,15 L56,19 L53,20 L51,19 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M60,16 Q62,13 65,14 L65,19 Q63,20 61,19 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M68,15 L70,13 L72,13 L73,15 L72,19 L70,20 L68,19 Z"/>
+    <path android:fillColor="#009900"
+          android:pathData="M76,14 Q78,12 80,13 L80,18 Q78,19 76,18 Z"/>
+
+</vector>

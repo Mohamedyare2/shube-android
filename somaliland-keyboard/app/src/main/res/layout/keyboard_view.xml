@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mainContainer"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#0F172A">
+
+    <!-- Top Toolbar -->
+    <LinearLayout
+        android:id="@+id/toolbarLayout"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="6dp"
+        android:background="#1E293B">
+
+        <ImageButton
+            android:id="@+id/btnKeyboard"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_edit"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Keyboard"
+            android:padding="6dp"/>
+
+        <ImageButton
+            android:id="@+id/btnEmoji"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_gallery"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Emoji"
+            android:padding="6dp"/>
+
+        <ImageButton
+            android:id="@+id/btnFlags"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/star_on"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Flags"
+            android:padding="6dp"/>
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Somaliland Keyboard"
+            android:textColor="#38BDF8"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center"/>
+
+        <!-- Mini Somaliland flag badge in toolbar -->
+        <ImageView
+            android:id="@+id/toolbarFlagBadge"
+            android:layout_width="28dp"
+            android:layout_height="18dp"
+            android:src="@drawable/flag_somaliland"
+            android:scaleType="fitCenter"
+            android:contentDescription="Somaliland Flag"
+            android:layout_marginEnd="6dp"/>
+
+    </LinearLayout>
+
+    <!-- Keyboard View -->
+    <android.inputmethodservice.KeyboardView
+        android:id="@+id/keyboardView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:keyPreviewLayout="@null"
+        android:background="#0F172A" />
+
+    <!-- Emoji Panel -->
+    <LinearLayout
+        android:id="@+id/emojiPanel"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="#0F172A"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Emoji &amp; Stickers"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:paddingBottom="4dp"/>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <GridLayout
+                android:id="@+id/emojiGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="6"/>
+
+        </ScrollView>
+
+    </LinearLayout>
+
+    <!-- Flag Panel (Searchable Flags with Somaliland #1) -->
+    <LinearLayout
+        android:id="@+id/flagPanel"
+        android:layout_width="match_parent"
+        android:layout_height="270dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="#0F172A"
+        android:padding="8dp">
+
+        <!-- Search Bar with Live Filter -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="#1E293B"
+            android:paddingHorizontal="10dp"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔍"
+                android:textSize="14sp"
+                android:paddingEnd="6dp"/>
+
+            <EditText
+                android:id="@+id/flagSearch"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:hint="@string/search_flag_hint"
+                android:textColorHint="#64748B"
+                android:textColor="#FFFFFF"
+                android:background="@null"
+                android:textSize="13sp"
+                android:inputType="text"
+                android:imeOptions="flagNoExtractUi|flagNoFullscreen"
+                android:importantForAutofill="no"/>
+
+            <ImageButton
+                android:id="@+id/btnClearSearch"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Clear"
+                android:visibility="gone"/>
+
+        </LinearLayout>
+
+        <!-- Search Results / Flag Grid -->
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <GridLayout
+                android:id="@+id/flagGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:columnCount="3"
+                android:alignmentMode="alignMargins"
+                android:useDefaultMargins="true"/>
+
+        </ScrollView>
+
+    </LinearLayout>
+
+</LinearLayout>

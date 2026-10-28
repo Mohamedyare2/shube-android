@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F172A">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:gravity="center_horizontal">
+
+        <!-- Top Somaliland Flag Banner -->
+        <ImageView
+            android:id="@+id/imgHeaderFlag"
+            android:layout_width="220dp"
+            android:layout_height="140dp"
+            android:src="@drawable/flag_somaliland"
+            android:contentDescription="Somaliland Flag"
+            android:scaleType="fitCenter"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Somaliland Keyboard"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="4dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="v1.0.0 · Searchable Flag Sticker · Offline &amp; Private"
+            android:textSize="13sp"
+            android:textColor="#38BDF8"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Status Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Hubinta xaaladda Keyboard-ka..."
+                android:textSize="14sp"
+                android:textColor="#FCD34D"
+                android:gravity="center"
+                android:textStyle="bold"/>
+
+        </LinearLayout>
+
+        <!-- Step 1: Enable -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step1_title"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#E2E8F0"
+                android:layout_marginBottom="6dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step1_desc"
+                android:textSize="12sp"
+                android:textColor="#94A3B8"
+                android:layout_marginBottom="14dp"/>
+
+            <Button
+                android:id="@+id/btnEnableKeyboard"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="@string/enable_keyboard"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:backgroundTint="#2563EB"
+                android:textColor="#FFFFFF"/>
+
+        </LinearLayout>
+
+        <!-- Step 2: Select -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step2_title"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#E2E8F0"
+                android:layout_marginBottom="6dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step2_desc"
+                android:textSize="12sp"
+                android:textColor="#94A3B8"
+                android:layout_marginBottom="14dp"/>
+
+            <Button
+                android:id="@+id/btnSelectKeyboard"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="@string/select_keyboard"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:backgroundTint="#059669"
+                android:textColor="#FFFFFF"/>
+
+        </LinearLayout>
+
+        <!-- Step 3: Somaliland Flag Instructions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step3_title"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:textColor="#E2E8F0"
+                android:layout_marginBottom="6dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/step3_desc"
+                android:textSize="12sp"
+                android:textColor="#94A3B8"
+                android:lineSpacingExtra="3dp"/>
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔒 Privacy Guaranteed: Maya-qorno wax kasta oo aad qorto. 100% Offline."
+            android:textSize="11sp"
+            android:textColor="#64748B"
+            android:gravity="center"
+            android:layout_marginBottom="24dp"/>
+
+    </LinearLayout>
+
+</ScrollView>
