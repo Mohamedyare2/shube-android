@@ -80,7 +80,7 @@ const apps = [
       'Privacy-first: no keylogging, works 100% offline',
     ],
     apkUrl: '/downloads/somaliland-keyboard-latest.apk',
-    fileSize: '~4 MB',
+    fileSize: '5.9 MB',
     btnClass: 'pub-btn-keyboard',
     requirements: 'Android 7.0 (Nougat) or higher',
   },

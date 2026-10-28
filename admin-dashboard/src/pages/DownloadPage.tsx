@@ -415,7 +415,7 @@ export default function DownloadPage() {
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: 4 }}>
                   Version <strong style={{ color: '#34D399' }}>v1.0.0</strong>
                   &nbsp;·&nbsp; Build 1
-                  &nbsp;·&nbsp; ~4 MB
+                  &nbsp;·&nbsp; 5.9 MB
                   &nbsp;·&nbsp; Searchable Somaliland Flag Sticker · Emoji · QWERTY IME
                 </div>
               </div>

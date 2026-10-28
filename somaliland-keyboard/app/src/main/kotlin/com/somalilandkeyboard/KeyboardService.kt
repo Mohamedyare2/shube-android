@@ -3,12 +3,10 @@ package com.somalilandkeyboard
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
 import android.inputmethodservice.KeyboardView
-import android.net.Uri
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -17,11 +15,8 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import com.somalilandkeyboard.data.FlagData
 import com.somalilandkeyboard.data.FlagItem
-import java.io.File
-import java.io.FileOutputStream
 
 @Suppress("DEPRECATION")
 class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListener {
@@ -190,7 +185,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
 
                     val nameLabel = TextView(this).apply {
                         text = item.name
-                        textSize = 11spToPx()
+                        textSize = 11f
                         setTextColor(Color.parseColor("#38BDF8"))
                         gravity = Gravity.CENTER
                         setPadding(0, 6, 0, 0)
@@ -199,7 +194,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
 
                     val badge = TextView(this).apply {
                         text = "⭐ FEATURED"
-                        textSize = 8spToPx()
+                        textSize = 8f
                         setTextColor(Color.parseColor("#34D399"))
                         gravity = Gravity.CENTER
                     }
@@ -220,7 +215,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
 
                     val tvName = TextView(this).apply {
                         text = item.name
-                        textSize = 10spToPx()
+                        textSize = 10f
                         setTextColor(Color.parseColor("#E2E8F0"))
                         gravity = Gravity.CENTER
                         maxLines = 1
@@ -262,10 +257,6 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
 
         Toast.makeText(this, getString(R.string.somaliland_flag_copied), Toast.LENGTH_SHORT).show()
     }
-
-    private fun 11spToPx(): Float = 11f
-    private fun 10spToPx(): Float = 10f
-    private fun 8spToPx(): Float = 8f
 
     override fun onPress(primaryCode: Int) {}
     override fun onRelease(primaryCode: Int) {}
