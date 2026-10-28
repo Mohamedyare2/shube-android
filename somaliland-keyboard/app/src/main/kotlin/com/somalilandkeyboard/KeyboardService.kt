@@ -372,7 +372,8 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
         if (!committed) {
             // Somaliland flag as text — visible in all apps
             // \uD83C\uDDF8\uD83C\uDDF1 = regional indicator S + L (not officially a flag but better than nothing)
-            ic.commitText("\uD83C\uDDF8\uD83C\uDDF1", 1)
+            ic.commitText("🟩⬜⭐🟥", 1)
+            Toast.makeText(this, "Calanka Somaliland: 🟩⬜⭐🟥 (Riix Paste si aad sawirka u dirtid)", Toast.LENGTH_SHORT).show()
         }
     }
 
