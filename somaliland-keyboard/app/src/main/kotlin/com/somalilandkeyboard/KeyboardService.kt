@@ -121,24 +121,24 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
         grid.removeAllViews()
 
         val emojis = listOf(
-            "😀", "😃", "😄", "😁", "😆", "😅",
-            "😂", "🤣", "😊", "😇", "🙂", "🙃",
-            "😉", "😌", "😍", "🥰", "😘", "😗",
-            "😋", "😛", "😜", "🤪", "😝", "🤑",
-            "🤗", "🤭", "🤫", "🤔", "🤐", "🤨",
-            "😐", "😑", "😶", "😏", "😒", "🙄",
-            "😬", "🤥", "😌", "😔", "😪", "🤤",
-            "😴", "😷", "🤒", "🤕", "🤢", "🤮",
-            "🥵", "🥶", "🥴", "😵", "🤯", "🤠",
-            "🥳", "😎", "🤓", "🧐", "😕", "😟",
-            "🙁", "😮", "😯", "😲", "😳", "🥺",
-            "😦", "😧", "😨", "😰", "😥", "😢",
-            "😭", "😱", "😖", "😣", "😞", "😓",
-            "😩", "😫", "🥱", "😤", "😡", "😠",
-            "👍", "👎", "👏", "🙌", "👐", "🤲",
-            "🤝", "🙏", "💪", "❤️", "💚", "🤍",
-            "🖤", "💯", "🔥", "✨", "🎉", "⭐",
-            "🐪", "🕌", "☪️", "📱", "💵", "🚀"
+            "\uD83D\uDE00", "\uD83D\uDE03", "\uD83D\uDE04", "\uD83D\uDE01", "\uD83D\uDE06", "\uD83D\uDE05",
+            "\uD83D\uDE02", "\uD83E\uDD23", "\uD83D\uDE0A", "\uD83D\uDE07", "\uD83D\uDE42", "\uD83D\uDE43",
+            "\uD83D\uDE09", "\uD83D\uDE0C", "\uD83D\uDE0D", "\uD83E\uDD70", "\uD83D\uDE18", "\uD83D\uDE17",
+            "\uD83D\uDE0B", "\uD83D\uDE1B", "\uD83D\uDE1C", "\uD83E\uDD2A", "\uD83D\uDE1D", "\uD83E\uDD11",
+            "\uD83E\uDD17", "\uD83E\uDD2D", "\uD83E\uDD2B", "\uD83E\uDD14", "\uD83E\uDD10", "\uD83E\uDD28",
+            "\uD83D\uDE10", "\uD83D\uDE11", "\uD83D\uDE36", "\uD83D\uDE0F", "\uD83D\uDE12", "\uD83D\uDE44",
+            "\uD83D\uDE2C", "\uD83E\uDD25", "\uD83D\uDE0C", "\uD83D\uDE14", "\uD83D\uDE2A", "\uD83E\uDD24",
+            "\uD83D\uDE34", "\uD83D\uDE37", "\uD83E\uDD12", "\uD83E\uDD15", "\uD83E\uDD22", "\uD83E\uDD2E",
+            "\uD83E\uDD75", "\uD83E\uDD76", "\uD83E\uDD74", "\uD83D\uDE35", "\uD83E\uDD2F", "\uD83E\uDD20",
+            "\uD83E\uDD73", "\uD83D\uDE0E", "\uD83E\uDD13", "\uD83E\uDDD0", "\uD83D\uDE15", "\uD83D\uDE1F",
+            "\uD83D\uDE41", "\uD83D\uDE2E", "\uD83D\uDE2F", "\uD83D\uDE32", "\uD83D\uDE33", "\uD83E\uDD7A",
+            "\uD83D\uDE26", "\uD83D\uDE27", "\uD83D\uDE28", "\uD83D\uDE30", "\uD83D\uDE25", "\uD83D\uDE22",
+            "\uD83D\uDE2D", "\uD83D\uDE31", "\uD83D\uDE16", "\uD83D\uDE23", "\uD83D\uDE1E", "\uD83D\uDE13",
+            "\uD83D\uDE29", "\uD83D\uDE2B", "\uD83E\uDD71", "\uD83D\uDE24", "\uD83D\uDE21", "\uD83D\uDE20",
+            "\uD83D\uDC4D", "\uD83D\uDC4E", "\uD83D\uDC4F", "\uD83D\uDE4C", "\uD83D\uDC50", "\uD83E\uDD32",
+            "\uD83E\uDD1D", "\uD83D\uDE4F", "\uD83D\uDCAA", "\u2764\uFE0F", "\uD83D\uDC9A", "\uD83E\uDD0D",
+            "\uD83D\uDDA4", "\uD83D\uDCAF", "\uD83D\uDD25", "\u2728", "\uD83C\uDF89", "\u2B50",
+            "\uD83D\uDC2A", "\uD83D\uDD4C", "\u262A\uFE0F", "\uD83D\uDCF1", "\uD83D\uDCB5", "\uD83D\uDE80"
         )
 
         val paddingPx = (8 * resources.displayMetrics.density).toInt()
@@ -183,7 +183,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                 }
 
                 if (item.drawableResName.isNotEmpty()) {
-                    // Custom curved waving flag (Somaliland)
+                    // Somaliland — show the real waving flag image + tap to insert
                     val iv = ImageView(this).apply {
                         setImageResource(R.drawable.flag_somaliland)
                         layoutParams = LinearLayout.LayoutParams(110, 65).apply {
@@ -201,15 +201,15 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         maxLines = 1
                     }
 
-                    val emojiPreview = TextView(this).apply {
+                    val hintLabel = TextView(this).apply {
                         text = "Calanka Somaliland"
                         textSize = 9f
-                        setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                        setTextColor(Color.parseColor("#94A3B8"))
                         gravity = Gravity.CENTER
                         setPadding(0, 1, 0, 2)
                     }
 
-                    // Compact action row with [ ✍️ Qor ] and [ 🖼️ Sticker ]
+                    // Two buttons: [Dir Sawir] and [Koobiyi]
                     val actionRow = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER
@@ -219,8 +219,8 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         )
                     }
 
-                    val btnText = TextView(this).apply {
-                        text = "✍️ Qor"
+                    val btnSend = TextView(this).apply {
+                        text = "Dir Sawir"
                         textSize = 9f
                         setTextColor(Color.WHITE)
                         setBackgroundColor(Color.parseColor("#2563EB"))
@@ -235,8 +235,8 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         }
                     }
 
-                    val btnSticker = TextView(this).apply {
-                        text = "🖼️ Sticker"
+                    val btnCopy = TextView(this).apply {
+                        text = "Koobiyi"
                         textSize = 9f
                         setTextColor(Color.WHITE)
                         setBackgroundColor(Color.parseColor("#059669"))
@@ -251,25 +251,24 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
                         }
                     }
 
-                    actionRow.addView(btnText)
-                    actionRow.addView(btnSticker)
+                    actionRow.addView(btnSend)
+                    actionRow.addView(btnCopy)
 
                     card.addView(iv)
                     card.addView(nameLabel)
-                    card.addView(emojiPreview)
+                    card.addView(hintLabel)
                     card.addView(actionRow)
 
-                    // Primary tap: insert the real Somaliland flag IMAGE into the text field
-                    // (like Gboard stickers — actual PNG image, not emoji text)
+                    // Primary tap on the card itself: always insert something visible
                     card.setOnClickListener {
                         sendSomalilandFlagSticker()
                     }
 
-                    // Long press: copy image to clipboard as fallback
                     card.setOnLongClickListener {
-                        sendSomalilandFlagSticker()
+                        copySomalilandFlagToClipboard()
                         true
                     }
+
                 } else if (item.emoji != null) {
                     val tvEmoji = TextView(this).apply {
                         text = item.emoji
@@ -311,75 +310,74 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
     }
 
     /**
-     * Inserts the authentic waving Somaliland flag as a real image into the text field
-     * via Android commitContent (Rich Content Insertion) — exactly like Gboard stickers.
-     * Works in Telegram, WhatsApp, Google Messages, Signal, etc.
-     * Falls back to clipboard copy for apps that don't support rich content.
+     * Inserts the Somaliland flag into the current text field.
+     *
+     * Strategy — guaranteed something ALWAYS appears:
+     * 1. Try Android commitContent (inserts the real PNG waving flag image).
+     *    This works in Telegram, WhatsApp, Signal, Google Messages.
+     * 2. If commitContent fails → fall back to commitText so text is ALWAYS inserted.
      */
     private fun sendSomalilandFlagSticker() {
-        val editorInfo = currentInputEditorInfo ?: run {
-            Toast.makeText(this, "Goob qoraal ah furi!", Toast.LENGTH_SHORT).show()
+        val ic = currentInputConnection
+        val editorInfo = currentInputEditorInfo
+
+        if (ic == null) {
+            Log.w("KeyboardService", "sendSomalilandFlagSticker: no InputConnection")
             return
         }
-        val ic = currentInputConnection ?: return
 
-        try {
-            // 1. Write the HD waving flag PNG to a shared cache file
-            val stickersDir = File(cacheDir, "stickers").apply { if (!exists()) mkdirs() }
-            val stickerFile = File(stickersDir, "somaliland_flag.png")
-            val bitmap = BitmapFactory.decodeResource(resources, R.drawable.flag_somaliland)
-                ?: BitmapFactory.decodeResource(resources, R.drawable.somaliland_sticker)
-            FileOutputStream(stickerFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        // Step 1: Try rich commitContent (actual PNG image)
+        var committed = false
+        if (editorInfo != null) {
+            try {
+                val stickersDir = File(cacheDir, "stickers").apply { if (!exists()) mkdirs() }
+                val stickerFile = File(stickersDir, "somaliland_flag.png")
+                val bitmap = BitmapFactory.decodeResource(resources, R.drawable.flag_somaliland)
+                if (bitmap != null) {
+                    FileOutputStream(stickerFile).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    val contentUri = FileProvider.getUriForFile(
+                        this, "com.somalilandkeyboard.fileprovider", stickerFile
+                    )
+                    try {
+                        grantUriPermission(
+                            editorInfo.packageName, contentUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    } catch (e2: Exception) {
+                        Log.w("KeyboardService", "grantUri failed: ${e2.message}")
+                    }
+                    val desc = ClipDescription("Somaliland Flag", arrayOf("image/png", "image/*"))
+                    val info = InputContentInfoCompat(contentUri, desc, null)
+                    val flags2 = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
+                        InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION else 0
+                    committed = InputConnectionCompat.commitContent(ic, editorInfo, info, flags2, null)
+                    // Also copy to clipboard
+                    try {
+                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newUri(contentResolver, "Somaliland Flag", contentUri))
+                    } catch (e3: Exception) {
+                        Log.w("KeyboardService", "clipboard: ${e3.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("KeyboardService", "commitContent error: ${e.message}", e)
+                committed = false
             }
+        }
 
-            // 2. Get a content:// URI that other apps can read
-            val contentUri = FileProvider.getUriForFile(
-                this,
-                "com.somalilandkeyboard.fileprovider",
-                stickerFile
-            )
-
-            // 3. Grant read permission to target app
-            grantUriPermission(
-                editorInfo.packageName,
-                contentUri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-
-            // 4. Try commitContent (rich image insertion into text field)
-            // We ALWAYS try this — even if editorInfo reports no mimeTypes.
-            // Modern Telegram / WhatsApp / Messages / Signal all support it.
-            val description = ClipDescription("Somaliland Flag", arrayOf("image/png", "image/*"))
-            val contentInfo = InputContentInfoCompat(contentUri, description, null)
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
-                InputConnectionCompat.INPUT_CONTENT_GRANT_READ_URI_PERMISSION else 0
-
-            val committed = InputConnectionCompat.commitContent(ic, editorInfo, contentInfo, flags, null)
-
-            // 5. Always also copy to clipboard as universal fallback
-            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newUri(contentResolver, "Somaliland Flag", contentUri)
-            cm.setPrimaryClip(clip)
-
-            if (committed) {
-                // SUCCESS: image was inserted directly into the text field!
-                Toast.makeText(this, "✅ Calanka Somaliland ayaa soo gaaray!", Toast.LENGTH_SHORT).show()
-            } else {
-                // App doesn't support direct image insertion (e.g. plain EditText)
-                // Clipboard copy already done above
-                Toast.makeText(this, "Calanka waa la koobiyeeyay! Riix & Dhejiso (Paste).", Toast.LENGTH_SHORT).show()
-            }
-
-        } catch (e: Exception) {
-            Log.e("KeyboardService", "sendSomalilandFlagSticker error: ${e.message}", e)
-            Toast.makeText(this, "Khalad: ${e.message}", Toast.LENGTH_SHORT).show()
+        // Step 2: ALWAYS insert visible text if image insertion did not succeed.
+        // This guarantees something ALWAYS appears in the text field.
+        if (!committed) {
+            // Somaliland flag as text — visible in all apps
+            // \uD83C\uDDF8\uD83C\uDDF1 = regional indicator S + L (not officially a flag but better than nothing)
+            ic.commitText("\uD83C\uDDF8\uD83C\uDDF1", 1)
         }
     }
 
     /**
-     * Copies the Somaliland flag image to the system clipboard.
-     * The user can then long-press → Paste in any app.
+     * Copies the Somaliland flag image to clipboard.
      */
     private fun copySomalilandFlagToClipboard() {
         try {
@@ -394,7 +392,7 @@ class KeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionListe
             }
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newUri(contentResolver, "Somaliland Flag", contentUri))
-            Toast.makeText(this, "📋 Calanka waa la koobiyeeyay! Riix Paste.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Calanka waa la koobiyeeyay! Riix Paste.", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.e("KeyboardService", "copySomalilandFlagToClipboard error", e)
         }
