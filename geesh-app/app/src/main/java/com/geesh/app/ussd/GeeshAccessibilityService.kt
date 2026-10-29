@@ -14,27 +14,53 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import java.util.Collections
 
 /**
- * Listens for USSD dialog windows and automatically enters the PIN reply (3495).
+ * Listens for USSD dialog windows and automatically enters the replies (single or multi-step).
  *
- * Flow:
- *   1. App dials *806*0633920307*{amount}*2050#
- *   2. Phone shows a USSD dialog asking for PIN
- *   3. This service detects that dialog, waits 2 s for it to settle,
- *      then types the PIN (3495) and presses SEND.
- *   4. Final confirmation text is emitted via ussdDialogFlow so the
- *      calling coroutine can record the result.
+ * Supports:
+ *   1. Single reply (Card USSD mode)
+ *   2. Multi-step replies (Bank mode: *800# -> PIN -> 5 -> 2 -> {lacag} -> 1 -> Bank PIN)
  */
 class GeeshAccessibilityService : AccessibilityService() {
 
     companion object {
-        // Flow to receive the text of any USSD dialog that appears
+        // Flow to receive the final dialog text emitted by USSD
         private val _ussdDialogFlow = MutableSharedFlow<String>(extraBufferCapacity = 5)
         val ussdDialogFlow = _ussdDialogFlow.asSharedFlow()
 
-        // The reply the service should type the next time a dialog appears
-        var nextReply: String? = null
+        // Queue of sequential replies for USSD dialogs
+        private val replyQueue = Collections.synchronizedList(mutableListOf<String>())
+
+        // The reply the service should type next (backward-compatible with single reply)
+        var nextReply: String?
+            get() = synchronized(replyQueue) { replyQueue.firstOrNull() }
+            set(value) {
+                synchronized(replyQueue) {
+                    replyQueue.clear()
+                    if (!value.isNullOrBlank()) {
+                        replyQueue.add(value)
+                    }
+                }
+            }
+
+        /**
+         * Sets multiple replies for a multi-step USSD session.
+         */
+        fun setReplies(replies: List<String>) {
+            synchronized(replyQueue) {
+                replyQueue.clear()
+                replyQueue.addAll(replies.filter { it.isNotBlank() })
+            }
+            Log.d("GeeshAccessibility", "Queued ${replyQueue.size} USSD replies: $replies")
+        }
+
+        fun clearReplies() {
+            synchronized(replyQueue) {
+                replyQueue.clear()
+            }
+        }
 
         // Guard against the same dialog firing multiple accessibility events
         @Volatile
@@ -68,7 +94,7 @@ class GeeshAccessibilityService : AccessibilityService() {
             val lower = dialogText.lowercase()
 
             // Skip system "processing…" dialogs — they don't need a reply
-            if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait")) {
+            if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
                 Log.d("GeeshAccessibility", "Skipping loading dialog: $dialogText")
                 return
             }
@@ -77,37 +103,44 @@ class GeeshAccessibilityService : AccessibilityService() {
 
             Log.d("GeeshAccessibility", "USSD Dialog detected: $dialogText")
 
-            val reply = nextReply
-            if (reply != null) {
-                // We have a reply to enter (PIN: 3495)
-                nextReply = null
+            val hasInput = findEditText(rootNode) != null
+            val hasRepliesLeft = synchronized(replyQueue) { replyQueue.isNotEmpty() }
+
+            if (hasInput && hasRepliesLeft) {
+                val currentReply = synchronized(replyQueue) {
+                    if (replyQueue.isNotEmpty()) replyQueue.removeAt(0) else null
+                } ?: return
+
                 isProcessingDialog = true
+                Log.d("GeeshAccessibility", "Submitting USSD reply (remaining: ${replyQueue.size}): $currentReply")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    Log.d("GeeshAccessibility", "Waiting 2 s for dialog to settle before entering PIN...")
-                    delay(2000)
+                    delay(1500) // Wait for dialog to settle
 
                     val freshNode = rootInActiveWindow
                     if (freshNode != null) {
-                        val ok = fillAndSubmit(freshNode, reply)
-                        Log.d("GeeshAccessibility", "PIN entry result: $ok")
+                        val ok = fillAndSubmit(freshNode, currentReply)
+                        Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
                         Log.e("GeeshAccessibility", "No window node available after delay")
                     }
 
-                    _ussdDialogFlow.tryEmit(dialogText)
-
-                    delay(500)
+                    delay(800)
                     isProcessingDialog = false
                 }
             } else {
-                // No pending reply — this is the final confirmation. Just dismiss.
+                // No pending reply or dialog has no input field — this is the final confirmation or an alert.
                 isProcessingDialog = true
-                clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE"))
+                Log.d("GeeshAccessibility", "Final or alert dialog detected. Dismissing...")
+
+                // Clear any remaining queue if dialog appeared without input
+                clearReplies()
+
+                clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
                 _ussdDialogFlow.tryEmit(dialogText)
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    delay(500)
+                    delay(800)
                     isProcessingDialog = false
                 }
             }
@@ -125,10 +158,10 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Enters [text] (the user's PIN) into the USSD reply dialog and presses Send.
+     * Enters [text] into the USSD reply dialog and presses Send.
      *
-     * Strategy (most-to-least reliable on real devices):
-     *  1. Find the EditText → focus it → copy [text] to clipboard → paste
+     * Strategy:
+     *  1. Find the EditText -> focus it -> copy [text] to clipboard -> paste
      *  2. If paste didn't populate the field, fall back to ACTION_SET_TEXT
      *  3. Click SEND / OK button
      */
@@ -138,7 +171,7 @@ class GeeshAccessibilityService : AccessibilityService() {
         val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
 
         if (target == null) {
-            Log.e("GeeshAccessibility", "No EditText found in USSD dialog — cannot enter PIN")
+            Log.e("GeeshAccessibility", "No EditText found in USSD dialog — cannot enter reply")
             return false
         }
 
@@ -147,10 +180,10 @@ class GeeshAccessibilityService : AccessibilityService() {
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
         delay(300)
 
-        // ── 3. Copy PIN to clipboard ─────────────────────────────────────────
+        // ── 3. Copy reply to clipboard ───────────────────────────────────────
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("pin", text))
-        Log.d("GeeshAccessibility", "PIN copied to clipboard: $text")
+        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+        Log.d("GeeshAccessibility", "Reply copied to clipboard: $text")
         delay(200)
 
         // ── 4. Paste into field ──────────────────────────────────────────────
@@ -170,7 +203,7 @@ class GeeshAccessibilityService : AccessibilityService() {
         }
 
         // ── 6. Click SEND ────────────────────────────────────────────────────
-        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply"))
+        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir"))
         Log.d("GeeshAccessibility", "Send button clicked: $sent")
         return sent
     }

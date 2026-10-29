@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
+import com.geesh.app.local.LocalPrefs
 import com.geesh.app.parser.GeeshSmsParser
 
 /**
@@ -43,6 +44,11 @@ class GeeshSmsReceiver : BroadcastReceiver() {
             }
 
             Log.d("GeeshSmsReceiver", "Parsed: amount=\$${parsed.amountDollar}, tixraac=${parsed.tixraac}")
+
+            // Update last SMS received timestamp to reset auto-check balance timer
+            try {
+                LocalPrefs(context).lastSmsReceivedTimestamp = System.currentTimeMillis()
+            } catch (_: Exception) {}
 
             // Start the processing service
             val serviceIntent = Intent(context, GeeshForegroundService::class.java).apply {
