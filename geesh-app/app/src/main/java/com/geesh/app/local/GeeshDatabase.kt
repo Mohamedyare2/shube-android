@@ -27,6 +27,9 @@ interface TransactionDao {
 
     @Query("SELECT * FROM processed_transactions ORDER BY processedAt DESC LIMIT 50")
     suspend fun getRecent(): List<ProcessedTransaction>
+
+    @Query("SELECT * FROM processed_transactions ORDER BY processedAt DESC")
+    suspend fun getAll(): List<ProcessedTransaction>
 }
 
 // ─── Database ─────────────────────────────────────────────────────────────────

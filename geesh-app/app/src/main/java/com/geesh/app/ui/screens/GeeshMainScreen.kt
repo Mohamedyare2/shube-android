@@ -63,6 +63,7 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
 
     // Card Mode State
     var ussdInput by remember { mutableStateOf(prefs.ussdTemplate ?: "") }
+    var showTemplatePin by remember { mutableStateOf(false) }
     var replyInput by remember { mutableStateOf(prefs.ussdReply ?: "") }
     var showReplyPin by remember { mutableStateOf(false) }
 
@@ -89,7 +90,10 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
     // Accessibility Status
     var accessibilityActive by remember { mutableStateOf(GeeshAccessibilityService.isServiceActive) }
 
-    // Recent Transactions
+    // Financial Analytics & History State
+    var selectedStatsPeriod by remember { mutableStateOf(StatsFilterPeriod.TODAY) }
+    var allTx by remember { mutableStateOf<List<ProcessedTransaction>>(emptyList()) }
+    var stats by remember { mutableStateOf(AppStats()) }
     var recentTx by remember { mutableStateOf<List<ProcessedTransaction>>(emptyList()) }
 
     // Periodically refresh accessibility & transactions
@@ -98,7 +102,10 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
             accessibilityActive = GeeshAccessibilityService.isServiceActive
             try {
                 val db = GeeshDatabase.getInstance(context)
-                recentTx = db.transactionDao().getRecent()
+                val fullList = db.transactionDao().getAll()
+                allTx = fullList
+                stats = calculateStats(fullList)
+                recentTx = fullList.take(50)
             } catch (_: Exception) {}
             delay(3000)
         }
@@ -278,7 +285,7 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                                 )
                             }
 
-                            // USSD Template input
+                            // USSD Template input (Masks PIN e.g. *2050# with ••••)
                             OutlinedTextField(
                                 value = ussdInput,
                                 onValueChange = { ussdInput = it; saveMessage = null },
@@ -286,12 +293,18 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                                 label = { Text("USSD Template Code", fontSize = 12.sp) },
                                 placeholder = {
                                     Text(
-                                        "*806*0634123456*{lacag}*2050#",
+                                        "*806*0634123456*{lacag}*••••#",
                                         fontSize = 11.sp,
                                         fontFamily = FontFamily.Monospace
                                     )
                                 },
                                 singleLine = true,
+                                visualTransformation = UssdTemplatePinMaskTransformation(!showTemplatePin),
+                                trailingIcon = {
+                                    IconButton(onClick = { showTemplatePin = !showTemplatePin }) {
+                                        Text(if (showTemplatePin) "👁️" else "🙈", fontSize = 14.sp)
+                                    }
+                                },
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = KeyboardType.Ascii,
                                     imeAction = ImeAction.Next
@@ -821,23 +834,231 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                 }
             }
 
+            Spacer(Modifier.height(20.dp))
+
+            // ── Analytics & Statistics Section (Maanta, Shalay, Usbuucan, Bishan, All) ──
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = CardSurface,
+                shape = RoundedCornerShape(20.dp),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = Brush.verticalGradient(
+                        listOf(PrimaryCyan.copy(alpha = 0.45f), CardBorder)
+                    )
+                )
+            ) {
+                Column(
+                    Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Title
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📊", fontSize = 18.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Lacagaha La Diray",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontSize = 15.sp
+                                )
+                                Text(
+                                    "Warbixinta guud ee lacagaha baxay",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                        }
+                    }
+
+                    // 5 Period Selector Chips (Maanta, Shalay, Usbuucan, Bishan, All)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        StatsFilterPeriod.values().forEach { period ->
+                            val isSelected = selectedStatsPeriod == period
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { selectedStatsPeriod = period },
+                                color = if (isSelected) PrimaryCyan else CardSurface.copy(alpha = 0.8f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        period.label,
+                                        fontSize = 10.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        color = if (isSelected) Color(0xFF0F172A) else Color(0xFFCBD5E1),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Featured Banner for Selected Period
+                    val currentSummary = when (selectedStatsPeriod) {
+                        StatsFilterPeriod.TODAY -> stats.today
+                        StatsFilterPeriod.YESTERDAY -> stats.yesterday
+                        StatsFilterPeriod.THIS_WEEK -> stats.thisWeek
+                        StatsFilterPeriod.THIS_MONTH -> stats.thisMonth
+                        StatsFilterPeriod.ALL -> stats.all
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF0F172A),
+                                        Color(0xFF1E293B)
+                                    )
+                                )
+                            )
+                            .border(1.dp, PrimaryCyan.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "${selectedStatsPeriod.icon} ${selectedStatsPeriod.label.uppercase()}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PrimaryCyan,
+                                    letterSpacing = 1.sp
+                                )
+                                Surface(
+                                    color = SuccessGreen.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(20.dp)
+                                ) {
+                                    Text(
+                                        "${currentSummary.count} xawaaladood",
+                                        color = Color(0xFF6EE7B7),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                String.format(Locale.US, "$%.2f", currentSummary.totalAmount),
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                            Text(
+                                "Wadarta guud ee lacagta guulaystay ee la diray",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+
+                    // 4 Mini Summary Cards for Quick Glance
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        StatsMiniCard(
+                            title = "Maanta",
+                            amount = stats.today.totalAmount,
+                            count = stats.today.count,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedStatsPeriod = StatsFilterPeriod.TODAY }
+                        )
+                        StatsMiniCard(
+                            title = "Shalay",
+                            amount = stats.yesterday.totalAmount,
+                            count = stats.yesterday.count,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedStatsPeriod = StatsFilterPeriod.YESTERDAY }
+                        )
+                        StatsMiniCard(
+                            title = "Bishan",
+                            amount = stats.thisMonth.totalAmount,
+                            count = stats.thisMonth.count,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedStatsPeriod = StatsFilterPeriod.THIS_MONTH }
+                        )
+                        StatsMiniCard(
+                            title = "All",
+                            amount = stats.all.totalAmount,
+                            count = stats.all.count,
+                            modifier = Modifier.weight(1f),
+                            onClick = { selectedStatsPeriod = StatsFilterPeriod.ALL }
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
 
-            // ── Live Transactions & Queue History ──────────────────────────────
+            // ── Live Transactions & Filtered Queue History ──────────────────────
+            val filteredTx = remember(allTx, selectedStatsPeriod) {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                cal.set(Calendar.MILLISECOND, 0)
+                val tStart = cal.timeInMillis
+
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+                val yStart = cal.timeInMillis
+                val yEnd = tStart
+
+                cal.timeInMillis = tStart
+                cal.firstDayOfWeek = Calendar.SATURDAY
+                val dow = cal.get(Calendar.DAY_OF_WEEK)
+                val dfSat = if (dow >= Calendar.SATURDAY) dow - Calendar.SATURDAY else dow + (7 - Calendar.SATURDAY)
+                cal.add(Calendar.DAY_OF_YEAR, -dfSat)
+                val wStart = cal.timeInMillis
+
+                cal.timeInMillis = tStart
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                val mStart = cal.timeInMillis
+
+                when (selectedStatsPeriod) {
+                    StatsFilterPeriod.TODAY -> allTx.filter { it.processedAt >= tStart }
+                    StatsFilterPeriod.YESTERDAY -> allTx.filter { it.processedAt in yStart until yEnd }
+                    StatsFilterPeriod.THIS_WEEK -> allTx.filter { it.processedAt >= wStart }
+                    StatsFilterPeriod.THIS_MONTH -> allTx.filter { it.processedAt >= mStart }
+                    StatsFilterPeriod.ALL -> allTx
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "SAFKA & TAARIIXDA DIRISTA",
+                    "SAFKA & TAARIIXDA (${selectedStatsPeriod.label.uppercase()})",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF94A3B8),
                     letterSpacing = 1.2.sp
                 )
                 Text(
-                    "FIFO (Sequential)",
+                    "${filteredTx.size} xawaaladood",
                     fontSize = 11.sp,
                     color = PrimaryCyan,
                     fontWeight = FontWeight.SemiBold
@@ -846,7 +1067,7 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
 
             Spacer(Modifier.height(10.dp))
 
-            if (recentTx.isEmpty()) {
+            if (filteredTx.isEmpty()) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = CardSurface.copy(alpha = 0.6f),
@@ -859,12 +1080,12 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                         Text("⏳", fontSize = 28.sp)
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Weli wax lacag ah ma ayna soo dhicin",
+                            "Wax lacag ah ma ayna soo dhicin muddadan (${selectedStatsPeriod.label})",
                             color = Color.White.copy(alpha = 0.6f),
                             fontSize = 13.sp
                         )
                         Text(
-                            "Fariimaha 898 marka ay yimaadaan si toos ah ayaa loo dirayaa mid mid",
+                            "Dooro 'All' si aad u aragto xawaaladihii hore oo dhan",
                             color = Color.White.copy(alpha = 0.35f),
                             fontSize = 11.sp
                         )
@@ -872,7 +1093,7 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    recentTx.forEach { tx ->
+                    filteredTx.take(50).forEach { tx ->
                         TxItemCard(tx)
                     }
                 }
@@ -1112,3 +1333,162 @@ private fun inputFieldColors(accent: Color) = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Color.White,
     unfocusedTextColor = Color.White
 )
+
+
+// ─── PIN Mask Transformation for USSD Template ─────────────────────────────
+class UssdTemplatePinMaskTransformation(private val isMasked: Boolean) : VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString): androidx.compose.ui.text.input.TransformedText {
+        if (!isMasked) {
+            return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+        }
+        val raw = text.text
+        if (raw.isEmpty()) {
+            return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+        }
+        val lastStarIndex = raw.lastIndexOf('*')
+        if (lastStarIndex != -1 && lastStarIndex < raw.length - 1) {
+            val afterStar = raw.substring(lastStarIndex + 1)
+            val hasHash = afterStar.endsWith("#")
+            val pinCandidate = if (hasHash) afterStar.dropLast(1) else afterStar
+            if (pinCandidate.isNotEmpty() && pinCandidate.all { it.isDigit() }) {
+                val masked = "•".repeat(pinCandidate.length)
+                val transformed = raw.substring(0, lastStarIndex + 1) + masked + (if (hasHash) "#" else "")
+                return androidx.compose.ui.text.input.TransformedText(
+                    androidx.compose.ui.text.AnnotatedString(transformed),
+                    androidx.compose.ui.text.input.OffsetMapping.Identity
+                )
+            }
+        }
+        return androidx.compose.ui.text.input.TransformedText(text, androidx.compose.ui.text.input.OffsetMapping.Identity)
+    }
+}
+
+// ─── Analytics / Stats Data Models ──────────────────────────────────────────
+enum class StatsFilterPeriod(val label: String, val icon: String) {
+    TODAY("Maanta", "📅"),
+    YESTERDAY("Shalay", "⏪"),
+    THIS_WEEK("Usbuucan", "📆"),
+    THIS_MONTH("Bishan", "🗓️"),
+    ALL("All", "🌐")
+}
+
+data class PeriodSummary(
+    val totalAmount: Double = 0.0,
+    val count: Int = 0
+)
+
+data class AppStats(
+    val today: PeriodSummary = PeriodSummary(),
+    val yesterday: PeriodSummary = PeriodSummary(),
+    val thisWeek: PeriodSummary = PeriodSummary(),
+    val thisMonth: PeriodSummary = PeriodSummary(),
+    val all: PeriodSummary = PeriodSummary()
+)
+
+fun calculateStats(list: List<ProcessedTransaction>): AppStats {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    val todayStart = cal.timeInMillis
+
+    cal.add(Calendar.DAY_OF_YEAR, -1)
+    val yesterdayStart = cal.timeInMillis
+    val yesterdayEnd = todayStart
+
+    cal.timeInMillis = todayStart
+    cal.firstDayOfWeek = Calendar.SATURDAY
+    val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+    val daysFromSat = if (dayOfWeek >= Calendar.SATURDAY) {
+        dayOfWeek - Calendar.SATURDAY
+    } else {
+        dayOfWeek + (7 - Calendar.SATURDAY)
+    }
+    cal.add(Calendar.DAY_OF_YEAR, -daysFromSat)
+    val weekStart = cal.timeInMillis
+
+    cal.timeInMillis = todayStart
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+    val monthStart = cal.timeInMillis
+
+    var sumToday = 0.0; var cntToday = 0
+    var sumYest = 0.0; var cntYest = 0
+    var sumWeek = 0.0; var cntWeek = 0
+    var sumMonth = 0.0; var cntMonth = 0
+    var sumAll = 0.0; var cntAll = 0
+
+    for (tx in list) {
+        if (tx.ussdResult.equals("success", ignoreCase = true)) {
+            val amt = tx.amountDollar
+            val time = tx.processedAt
+
+            sumAll += amt
+            cntAll++
+
+            if (time >= todayStart) {
+                sumToday += amt
+                cntToday++
+            } else if (time >= yesterdayStart && time < yesterdayEnd) {
+                sumYest += amt
+                cntYest++
+            }
+
+            if (time >= weekStart) {
+                sumWeek += amt
+                cntWeek++
+            }
+
+            if (time >= monthStart) {
+                sumMonth += amt
+                cntMonth++
+            }
+        }
+    }
+
+    return AppStats(
+        today = PeriodSummary(sumToday, cntToday),
+        yesterday = PeriodSummary(sumYest, cntYest),
+        thisWeek = PeriodSummary(sumWeek, cntWeek),
+        thisMonth = PeriodSummary(sumMonth, cntMonth),
+        all = PeriodSummary(sumAll, cntAll)
+    )
+}
+
+@Composable
+private fun StatsMiniCard(
+    title: String,
+    amount: Double,
+    count: Int,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        color = CardSurface.copy(alpha = 0.85f),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBorder)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(title, fontSize = 10.sp, color = Color(0xFF94A3B8), fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                String.format(Locale.US, "$%.2f", amount),
+                fontSize = 11.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            Text(
+                "$count tx",
+                fontSize = 8.5.sp,
+                color = PrimaryCyan.copy(alpha = 0.8f)
+            )
+        }
+    }
+}

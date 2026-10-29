@@ -278,12 +278,17 @@ class GeeshForegroundService : Service() {
 
             } else {
                 val template = prefs.ussdTemplate?.takeIf { it.isNotBlank() } ?: DEFAULT_TEMPLATE
-                ussdCodeToDial = template
+                var code = template
                     .replace("{lacag}", amountFormatted)
                     .replace("{amount}", amountFormatted)
 
                 val ussdReply = prefs.ussdReply?.takeIf { it.isNotBlank() }
-                if (ussdReply != null) {
+                if (ussdReply != null && code.contains("{pin}")) {
+                    code = code.replace("{pin}", ussdReply)
+                }
+                ussdCodeToDial = code
+
+                if (ussdReply != null && !template.contains("{pin}")) {
                     GeeshAccessibilityService.setReplies(listOf(ussdReply))
                 } else {
                     GeeshAccessibilityService.clearReplies()
