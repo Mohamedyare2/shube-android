@@ -295,7 +295,8 @@ class GatewayForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .build()
     }
@@ -304,9 +305,10 @@ class GatewayForegroundService : Service() {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "SHUBE Gateway Service",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Keeps the SMS listener and USSD processor active in the background"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
