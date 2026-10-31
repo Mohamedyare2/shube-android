@@ -59,8 +59,9 @@ class GeeshForegroundService : Service() {
         private const val CHANNEL_ID      = "geesh_service_channel"
 
         // Realistic telecom timeouts (ms) - prevents blocking queue for minutes
-        private const val DIALOG_TIMEOUT_MS = 25_000L
-        private const val BALANCE_CHECK_TIMEOUT_MS = 22_000L
+        private const val CARD_DIALOG_TIMEOUT_MS = 35_000L
+        private const val BANK_DIALOG_TIMEOUT_MS = 90_000L
+        private const val BALANCE_CHECK_TIMEOUT_MS = 30_000L
 
         private const val DEFAULT_TEMPLATE = "*806*{lacag}#"
     }
@@ -242,7 +243,8 @@ class GeeshForegroundService : Service() {
             android.os.PowerManager.ON_AFTER_RELEASE,
             "Geesh::USSD_Transfer"
         )
-        wl?.acquire(60_000L)
+        val wakeLockDuration = if (isBankMode) 120_000L else 60_000L
+        wl?.acquire(wakeLockDuration)
 
         try {
             val ussdCodeToDial: String
@@ -304,12 +306,13 @@ class GeeshForegroundService : Service() {
 
             dialUssd(ussdCodeToDial)
 
-            val resultText = withTimeoutOrNull(DIALOG_TIMEOUT_MS) {
+            val timeoutMs = if (isBankMode) BANK_DIALOG_TIMEOUT_MS else CARD_DIALOG_TIMEOUT_MS
+            val resultText = withTimeoutOrNull(timeoutMs) {
                 GeeshAccessibilityService.ussdDialogFlow.first()
             }
 
             if (resultText == null) {
-                Log.e("GeeshService", "USSD timed out — no dialog received within ${DIALOG_TIMEOUT_MS}ms")
+                Log.e("GeeshService", "USSD timed out — no dialog received within ${timeoutMs}ms")
                 return Pair("timeout", "Waqtigu wuu dhamaaday")
             }
 
@@ -346,7 +349,9 @@ class GeeshForegroundService : Service() {
         return if (isBankMode) {
             lower.contains("waxaad lacag dhigatay") ||
             lower.contains("dhigatay") ||
+            lower.contains("dhigasho") ||
             lower.contains("lagu shubay") ||
+            lower.contains("ku shubtay") ||
             lower.contains("xisaabta") ||
             lower.contains("guul") ||
             lower.contains("success")

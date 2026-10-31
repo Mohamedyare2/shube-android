@@ -123,10 +123,10 @@ class GeeshAccessibilityService : AccessibilityService() {
                 Log.d("GeeshAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    // Poll for up to 2.5 seconds (every 250ms) to allow the EditText to inflate
+                    // Poll for up to 10 seconds (every 250ms, 40 attempts) to allow the EditText to inflate
                     var targetNode: AccessibilityNodeInfo? = null
                     var attempts = 0
-                    while (attempts < 10) {
+                    while (attempts < 40) {
                         delay(250)
                         val freshRoot = rootInActiveWindow
                         if (freshRoot != null) {
@@ -144,7 +144,7 @@ class GeeshAccessibilityService : AccessibilityService() {
                         val ok = fillAndSubmit(targetNode, currentReply)
                         Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
-                        Log.w("GeeshAccessibility", "No EditText found after waiting 2.5s. Treating as alert/result dialog.")
+                        Log.w("GeeshAccessibility", "No EditText found after waiting 10s. Treating as alert/result dialog.")
                         val freshRoot = rootInActiveWindow ?: rootNode
                         val text = extractText(freshRoot).ifBlank { dialogText }
                         clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
