@@ -8,21 +8,24 @@ import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Collections
 
 /**
- * Listens for USSD dialog windows and automatically enters the replies (single or multi-step).
- *
+ * Enhanced Accessibility Service that automates USSD dialog interactions.
  * Supports:
- *   1. Single reply (Card USSD mode)
- *   2. Multi-step replies (Bank mode: *800# -> PIN -> 5 -> 2 -> {lacag} -> 1 -> Bank PIN)
- *   3. Auto balance check reply (*801# -> PIN)
+ *  - Both Direct Card mode (1 reply/PIN) and Bank Account mode (up to 7 sequential replies)
+ *  - Works seamlessly while device is locked (Lock Screen / Keyguard active)
+ *  - Polls for the EditText input field (up to 10 seconds)
+ *  - Multi-window search for USSD dialogs over the Keyguard
+ *  - Emits the final dialog response for success/failure analysis
  */
 class GeeshAccessibilityService : AccessibilityService() {
 
@@ -47,7 +50,7 @@ class GeeshAccessibilityService : AccessibilityService() {
             }
 
         /**
-         * Sets multiple replies for a multi-step USSD session.
+          Sets multiple replies for a multi-step USSD session.
          */
         fun setReplies(replies: List<String>) {
             synchronized(replyQueue) {
@@ -77,10 +80,12 @@ class GeeshAccessibilityService : AccessibilityService() {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                          AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         isServiceActive = true
-        Log.d("GeeshAccessibility", "Accessibility service connected")
+        Log.d("GeeshAccessibility", "Accessibility service connected with interactive window retrieval")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -96,7 +101,7 @@ class GeeshAccessibilityService : AccessibilityService() {
         if (isDialogEvent) {
             if (isProcessingDialog) return
 
-            val rootNode = rootInActiveWindow ?: return
+            val rootNode = rootInActiveWindow ?: findUssdRootNode() ?: return
             val dialogText = extractText(rootNode)
             val lower = dialogText.lowercase()
 
@@ -128,7 +133,7 @@ class GeeshAccessibilityService : AccessibilityService() {
                     var attempts = 0
                     while (attempts < 40) {
                         delay(250)
-                        val freshRoot = rootInActiveWindow
+                        val freshRoot = rootInActiveWindow ?: findUssdRootNode()
                         if (freshRoot != null) {
                             val edit = findEditText(freshRoot)
                             if (edit != null) {
@@ -145,7 +150,7 @@ class GeeshAccessibilityService : AccessibilityService() {
                         Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
                         Log.w("GeeshAccessibility", "No EditText found after waiting 10s. Treating as alert/result dialog.")
-                        val freshRoot = rootInActiveWindow ?: rootNode
+                        val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
                         val text = extractText(freshRoot).ifBlank { dialogText }
                         clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                         _ussdDialogFlow.tryEmit(text)
@@ -161,7 +166,7 @@ class GeeshAccessibilityService : AccessibilityService() {
 
                 CoroutineScope(Dispatchers.Main).launch {
                     delay(800) // Give user/screen time to settle
-                    val freshRoot = rootInActiveWindow ?: rootNode
+                    val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
                     val finalText = extractText(freshRoot).ifBlank { dialogText }
 
                     clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
@@ -175,6 +180,25 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Searches across all active interactive windows (especially useful when phone is locked).
+     */
+    private fun findUssdRootNode(): AccessibilityNodeInfo? {
+        val windowList = try { windows } catch (_: Exception) { emptyList<AccessibilityWindowInfo>() }
+        for (w in windowList) {
+            val root = w.root ?: continue
+            val edit = findEditText(root)
+            if (edit != null) return root
+            val text = extractText(root).lowercase()
+            if (text.contains("shub") || text.contains("geli") || text.contains("pin") ||
+                text.contains("lacag") || text.contains("hadhaaga") || text.contains("haraaga") ||
+                text.contains("dhigatay") || text.contains("dirtay") || text.contains("guul")) {
+                return root
+            }
+        }
+        return null
+    }
 
     private fun extractText(node: AccessibilityNodeInfo?): String {
         if (node == null) return ""
