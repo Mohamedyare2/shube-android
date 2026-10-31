@@ -469,14 +469,16 @@ class GeeshForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .build()
     }
 
     private fun createNotificationChannel() {
-        val ch = NotificationChannel(CHANNEL_ID, "Geesh Service", NotificationManager.IMPORTANCE_LOW).apply {
+        val ch = NotificationChannel(CHANNEL_ID, "Geesh Service", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Geesh background payment processor"
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(ch)
     }
