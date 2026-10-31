@@ -52,11 +52,34 @@ class UssdAccessibilityService : AccessibilityService() {
         val info = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+            // FLAG_RETRIEVE_INTERACTIVE_WINDOWS: allows us to see ALL windows including
+            // USSD dialogs shown over the lock screen (keyguard).
+            flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                    AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         serviceInfo = info
         isServiceActive = true
-        Log.d("UssdAccessibility", "Service connected")
+        Log.d("UssdAccessibility", "Service connected (lock-screen mode enabled)")
+    }
+
+    /**
+     * Searches ALL active windows (including over the keyguard/lock screen) for
+     * a USSD dialog root node. Falls back to this when [rootInActiveWindow] is null,
+     * which happens whenever the screen is locked.
+     */
+    private fun findUssdRootNode(): AccessibilityNodeInfo? {
+        return try {
+            windows?.firstNotNullOfOrNull { window ->
+                val root = window.root ?: return@firstNotNullOfOrNull null
+                val text = extractTextFromNode(root)
+                // Accept any window that has visible text (likely a USSD dialog)
+                if (text.isNotBlank()) root else null
+            }
+        } catch (e: Exception) {
+            Log.w("UssdAccessibility", "findUssdRootNode failed: ${e.message}")
+            null
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -75,7 +98,8 @@ class UssdAccessibilityService : AccessibilityService() {
         if (isDialogEvent) {
             if (isProcessingDialog) return // Ignore redundant events for the same dialog while we process it
 
-            val rootNode = rootInActiveWindow ?: return
+            // Use rootInActiveWindow normally; fall back to searching all windows when locked.
+            val rootNode = rootInActiveWindow ?: findUssdRootNode() ?: return
             
             val dialogText = extractTextFromNode(rootNode)
             
@@ -103,7 +127,8 @@ class UssdAccessibilityService : AccessibilityService() {
                         var attempts = 0
                         while (attempts < 60) {
                             delay(250)
-                            val freshNode = rootInActiveWindow
+                            // When locked, rootInActiveWindow may be null — fall back to all windows
+                            val freshNode = rootInActiveWindow ?: findUssdRootNode()
                             if (freshNode != null) {
                                 val editTexts = freshNode.findAccessibilityNodeInfosByViewId("android:id/input")
                                 val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(freshNode)
@@ -119,7 +144,7 @@ class UssdAccessibilityService : AccessibilityService() {
                             val success = fillAndSubmitDialog(targetNode, reply)
                             Log.d("UssdAccessibility", "Submit reply success: $success after ${attempts * 250}ms")
                         } else {
-                            val freshNode = rootInActiveWindow ?: rootNode
+                            val freshNode = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
                             val success = fillAndSubmitDialog(freshNode, reply)
                             Log.w("UssdAccessibility", "Fallback submit reply success: $success after 15s timeout")
                         }
