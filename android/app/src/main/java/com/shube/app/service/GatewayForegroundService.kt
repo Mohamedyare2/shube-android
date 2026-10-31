@@ -254,7 +254,7 @@ class GatewayForegroundService : Service() {
             UssdStep(
                 type              = "DIAL",
                 ussdCodeTemplate  = bundle.ussdCode,
-                timeoutMs         = 12_000
+                timeoutMs         = 15_000
             )
         )
 
@@ -264,7 +264,7 @@ class GatewayForegroundService : Service() {
                 UssdStep(
                     type      = "SEND_REPLY",
                     value     = reply,
-                    timeoutMs = 8_000
+                    timeoutMs = 15_000
                 )
             )
         }
@@ -273,7 +273,7 @@ class GatewayForegroundService : Service() {
         steps.add(
             UssdStep(
                 type            = "READ_RESPONSE",
-                timeoutMs       = 8_000,
+                timeoutMs       = 15_000,
                 successPatterns = listOf("success", "imtixaan", "la diray", "sent", "activated"),
                 failurePatterns = listOf("failed", "error", "khalad", "xasilan", "insufficient")
             )

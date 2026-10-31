@@ -65,8 +65,14 @@ class UssdAccessibilityService : AccessibilityService() {
         // We are looking for dialogs, typically from the phone app or system UI
         val className = event.className?.toString() ?: return
         
+        val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
+                            className.contains("AlertDialog", ignoreCase = true) ||
+                            className.contains("Ussd", ignoreCase = true) ||
+                            className.contains("Phone", ignoreCase = true) ||
+                            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+
         // Common USSD dialog class names (varies heavily by OEM)
-        if (className.contains("Dialog") || className.contains("AlertDialog")) {
+        if (isDialogEvent) {
             if (isProcessingDialog) return // Ignore redundant events for the same dialog while we process it
 
             val rootNode = rootInActiveWindow ?: return
@@ -91,16 +97,31 @@ class UssdAccessibilityService : AccessibilityService() {
                     isProcessingDialog = true
                     
                     CoroutineScope(Dispatchers.Main).launch {
-                        Log.d("UssdAccessibility", "Waiting 2 seconds for UI to settle...")
-                        delay(2000)
-                        
-                        val freshNode = rootInActiveWindow
-                        if (freshNode != null) {
-                            // Attempt to find EditText and enter text, then click Send/OK
-                            val success = fillAndSubmitDialog(freshNode, reply)
-                            Log.d("UssdAccessibility", "Submit reply success: $success")
+                        Log.d("UssdAccessibility", "Polling for EditText (up to 15s)...")
+                        // Active polling loop up to 15 seconds (every 250ms, 60 attempts) to ensure EditText is ready
+                        var targetNode: AccessibilityNodeInfo? = null
+                        var attempts = 0
+                        while (attempts < 60) {
+                            delay(250)
+                            val freshNode = rootInActiveWindow
+                            if (freshNode != null) {
+                                val editTexts = freshNode.findAccessibilityNodeInfosByViewId("android:id/input")
+                                val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(freshNode)
+                                if (targetEdit != null) {
+                                    targetNode = freshNode
+                                    break
+                                }
+                            }
+                            attempts++
+                        }
+
+                        if (targetNode != null) {
+                            val success = fillAndSubmitDialog(targetNode, reply)
+                            Log.d("UssdAccessibility", "Submit reply success: $success after ${attempts * 250}ms")
                         } else {
-                            Log.e("UssdAccessibility", "Could not get fresh window node after delay")
+                            val freshNode = rootInActiveWindow ?: rootNode
+                            val success = fillAndSubmitDialog(freshNode, reply)
+                            Log.w("UssdAccessibility", "Fallback submit reply success: $success after 15s timeout")
                         }
                         
                         // Emit to state machine AFTER we finish so it doesn't advance prematurely
@@ -114,7 +135,7 @@ class UssdAccessibilityService : AccessibilityService() {
                     isProcessingDialog = true
                     
                     // Just reading a final response, attempt to click OK/Dismiss
-                    clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE"))
+                    clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
                     
                     // Emit immediately since there is no reply
                     _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
@@ -170,6 +191,17 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     private fun clickButton(node: AccessibilityNodeInfo, labels: List<String>): Boolean {
+        // Try standard Android button IDs first
+        val standardIds = listOf("android:id/button1", "com.android.phone:id/button1")
+        for (id in standardIds) {
+            val buttons = node.findAccessibilityNodeInfosByViewId(id)
+            for (button in buttons) {
+                if (button.isClickable) {
+                    button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    return true
+                }
+            }
+        }
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
             for (button in buttons) {
