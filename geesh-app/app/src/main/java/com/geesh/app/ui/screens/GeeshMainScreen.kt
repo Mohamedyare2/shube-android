@@ -106,8 +106,10 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                 allTx = fullList
                 stats = calculateStats(fullList)
                 recentTx = fullList.take(50)
-            } catch (_: Exception) {}
-            delay(3000)
+            } catch (e: Exception) {
+                android.util.Log.e("GeeshMain", "Error loading stats", e)
+            }
+            delay(2000)
         }
     }
 
@@ -1419,7 +1421,14 @@ fun calculateStats(list: List<ProcessedTransaction>): AppStats {
     var sumAll = 0.0; var cntAll = 0
 
     for (tx in list) {
-        if (tx.ussdResult.equals("success", ignoreCase = true)) {
+        val res = tx.ussdResult.lowercase()
+        val isSuccess = res == "success" ||
+                        res.contains("guul") ||
+                        res.contains("sent") ||
+                        res.contains("la diray") ||
+                        (!res.startsWith("failed") && !res.contains("timeout") && !res.contains("pending"))
+
+        if (isSuccess) {
             val amt = tx.amountDollar
             val time = tx.processedAt
 
@@ -1429,7 +1438,7 @@ fun calculateStats(list: List<ProcessedTransaction>): AppStats {
             if (time >= todayStart) {
                 sumToday += amt
                 cntToday++
-            } else if (time >= yesterdayStart && time < yesterdayEnd) {
+            } else if (time in yesterdayStart until yesterdayEnd) {
                 sumYest += amt
                 cntYest++
             }

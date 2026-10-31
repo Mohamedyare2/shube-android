@@ -32,7 +32,7 @@ data class PaymentTask(
  *  1. Receives parsed SMS messages and puts them into a strict FIFO queue.
  *  2. Processes transactions sequentially in order of arrival (first-come, first-served).
  *  3. Supports both CARD mode (direct USSD) and BANK mode (*800# deposit flow).
- *  4. Retries failed USSD transfers automatically.
+ *  4. Retries failed USSD transfers automatically with fast, non-blocking timeouts.
  *  5. Automatically checks card balance via *801# when no 898 SMS is received for user-defined interval,
  *     and sweeps any balance >= $0.12 into the active payment channel.
  */
@@ -58,9 +58,9 @@ class GeeshForegroundService : Service() {
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID      = "geesh_service_channel"
 
-        // Timeout waiting for USSD flow completion (ms) - 75s for multi-step bank flow
-        private const val DIALOG_TIMEOUT_MS = 75_000L
-        private const val BALANCE_CHECK_TIMEOUT_MS = 35_000L
+        // Realistic telecom timeouts (ms) - prevents blocking queue for minutes
+        private const val DIALOG_TIMEOUT_MS = 25_000L
+        private const val BALANCE_CHECK_TIMEOUT_MS = 22_000L
 
         private const val DEFAULT_TEMPLATE = "*806*{lacag}#"
     }
@@ -88,8 +88,8 @@ class GeeshForegroundService : Service() {
                 } finally {
                     isBusyProcessing = false
                 }
-                // Cool-down pause so telecom network & dialer UI settle before next USSD
-                delay(4_000)
+                // Short cool-down pause so telecom network & dialer UI settle before next USSD
+                delay(3_000)
             }
         }
     }
@@ -204,9 +204,9 @@ class GeeshForegroundService : Service() {
         // Try up to 2 attempts (initial attempt + 1 retry if failed)
         for (attempt in 1..2) {
             if (attempt > 1) {
-                Log.w("GeeshService", "Payment attempt 1 failed. Waiting 5s before RETRY attempt 2 for $tixraac...")
-                notify("⚠️ Geesh", "USSD wuu fashilmay, mar labaad ayaa la isku dayayaa (\$$amount)...")
-                delay(5_000)
+                Log.w("GeeshService", "Payment attempt 1 did not succeed. Waiting 3s before RETRY attempt 2 for $tixraac...")
+                notify("⚠️ Geesh", "USSD mar labaad ayaa la isku dayayaa (\$$amount)...")
+                delay(3_000)
             }
 
             val (resultStatus, dialogText) = executeSingleTransfer(isBankMode, prefs, amount, amountFormatted)
@@ -215,6 +215,10 @@ class GeeshForegroundService : Service() {
 
             if (resultStatus == "success") {
                 Log.d("GeeshService", "Payment succeeded on attempt $attempt: $dialogText")
+                break
+            }
+            if (resultStatus == "failed_accessibility" || resultStatus == "failed_missing_pins") {
+                // Do not retry on broken configuration
                 break
             }
         }
@@ -238,7 +242,7 @@ class GeeshForegroundService : Service() {
             android.os.PowerManager.ON_AFTER_RELEASE,
             "Geesh::USSD_Transfer"
         )
-        wl?.acquire(120_000L)
+        wl?.acquire(60_000L)
 
         try {
             val ussdCodeToDial: String
@@ -323,15 +327,39 @@ class GeeshForegroundService : Service() {
 
     /**
      * Determines if the transfer succeeded based on exact telecom confirmation phrases:
-     *  - Bank mode: contains "waxaad lacag dhigatay"
-     *  - Direct Card mode: contains "waxaad" and "u dirtay"
+     *  - Bank mode: contains "waxaad lacag dhigatay", "dhigatay", "lagu shubay", etc.
+     *  - Direct Card mode: contains "waxaad" and "dirtay", "u dirtay", "la diray", "guul", etc.
      */
     private fun isTransferSuccessful(isBankMode: Boolean, dialogText: String): Boolean {
         val lower = dialogText.lowercase()
+
+        // 1. Explicit failure keywords
+        val failureKeywords = listOf(
+            "khalad", "failed", "error", "maku filna", "ma haysatid", "kuma filna",
+            "ma shaqaynayo", "invalid", "lama heli karo", "waqtigu wuu dhamaaday", "cancelled"
+        )
+        if (failureKeywords.any { lower.contains(it) }) {
+            return false
+        }
+
+        // 2. Success keywords
         return if (isBankMode) {
-            lower.contains("waxaad lacag dhigatay") || lower.contains("lagu shubay") || lower.contains("guul")
+            lower.contains("waxaad lacag dhigatay") ||
+            lower.contains("dhigatay") ||
+            lower.contains("lagu shubay") ||
+            lower.contains("xisaabta") ||
+            lower.contains("guul") ||
+            lower.contains("success")
         } else {
-            (lower.contains("waxaad") && lower.contains("u dirtay")) || lower.contains("la diray") || lower.contains("guul")
+            (lower.contains("waxaad") && lower.contains("dirtay")) ||
+            (lower.contains("waxaad") && lower.contains("wareejisay")) ||
+            lower.contains("u dirtay") ||
+            lower.contains("la diray") ||
+            lower.contains("sent") ||
+            lower.contains("guul") ||
+            lower.contains("success") ||
+            lower.contains("hadhaagaagu waa") ||
+            lower.contains("haraagaagu waa")
         }
     }
 
@@ -355,7 +383,7 @@ class GeeshForegroundService : Service() {
             android.os.PowerManager.ON_AFTER_RELEASE,
             "Geesh::AutoBalanceCheck"
         )
-        wl?.acquire(60_000L)
+        wl?.acquire(45_000L)
 
         try {
             Log.d("GeeshService", "Triggering Auto Balance Check via *801#")
@@ -383,8 +411,11 @@ class GeeshForegroundService : Service() {
 
             if (parsed.isSendable) {
                 // Balance is >= $0.12 — sweep it!
-                Log.d("GeeshService", "Auto-sweep triggered! Balance \$$parsed.amountDollar >= \$0.12")
+                Log.d("GeeshService", "Auto-sweep triggered! Balance \$${parsed.amountDollar} >= \$0.12")
                 notify("Geesh 💰", "Hadhaag la helay: \$${parsed.amountDollar} — Safka ayaa lagu daray!")
+
+                // Critical: Wait 2.5 seconds for previous *801# dialog to completely close on screen
+                delay(2500)
 
                 val task = PaymentTask(
                     amount = parsed.amountDollar,

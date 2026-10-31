@@ -33,7 +33,7 @@ class GeeshSmsParser {
 
     // Matches the FIRST "$X" or "$X.XX" in the message
     private val amountPattern = Pattern.compile(
-        """\$([0-9]+(?:\.[0-9]+)?)""",
+        """\$\s*([0-9]+(?:\.[0-9]+)?)""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -43,9 +43,9 @@ class GeeshSmsParser {
         Pattern.CASE_INSENSITIVE
     )
 
-    // Matches balance dialog: "Hadhaageedu waa $0.1007"
+    // Matches balance dialog: "Hadhaageedu waa $0.1007" or "Hadhaagaagu waa $0.50" or "$0.50"
     private val balancePattern = Pattern.compile(
-        """(?:Hadhaageedu\s+waa\s+|Hadhaagaagu\s+waa\s+)?\$([0-9]+(?:\.[0-9]+)?)""",
+        """(?:Hadhaag[a-z]*\s+waa\s+|Haraag[a-z]*\s+waa\s+)?\$\s*([0-9]+(?:\.[0-9]+)?)""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -86,19 +86,22 @@ class GeeshSmsParser {
         }
 
         val rawStr = matcher.group(1) ?: return null
-        val amountDouble = rawStr.toDoubleOrNull() ?: return null
+        val rawDouble = rawStr.toDoubleOrNull() ?: return null
 
-        // Telecom USSD requires at most 2 decimal places (cents)
-        val normalizedStr = if (rawStr.contains(".") && rawStr.substringAfter(".").length > 2) {
-            String.format(Locale.US, "%.2f", amountDouble)
+        // Round down (floor) to 2 decimal places to avoid sweeping more than available
+        val amountDouble = (Math.floor(rawDouble * 100.0) / 100.0)
+
+        // Telecom USSD formatting
+        val formattedStr = if (amountDouble % 1.0 == 0.0) {
+            amountDouble.toLong().toString()
         } else {
-            rawStr
-        }.removeSuffix(".00").removeSuffix(".0")
+            String.format(Locale.US, "%.2f", amountDouble).trimEnd('0').trimEnd('.')
+        }
 
-        val amountFormatted = normalizedStr.replace(".", "*")
+        val amountFormatted = formattedStr.replace(".", "*")
         val isSendable = amountDouble >= MINIMUM_SWEEP_AMOUNT
 
-        Log.d("GeeshParser", "Parsed Balance: \$$amountDouble (formatted: $amountFormatted, isSendable=$isSendable)")
+        Log.d("GeeshParser", "Parsed Balance: \$$amountDouble (raw: $rawDouble, formatted: $amountFormatted, isSendable=$isSendable)")
         return ParsedBalance(
             amountDollar = amountDouble,
             amountFormatted = amountFormatted,

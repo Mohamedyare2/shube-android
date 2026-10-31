@@ -22,6 +22,7 @@ import java.util.Collections
  * Supports:
  *   1. Single reply (Card USSD mode)
  *   2. Multi-step replies (Bank mode: *800# -> PIN -> 5 -> 2 -> {lacag} -> 1 -> Bank PIN)
+ *   3. Auto balance check reply (*801# -> PIN)
  */
 class GeeshAccessibilityService : AccessibilityService() {
 
@@ -84,9 +85,15 @@ class GeeshAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        val className = event.className?.toString() ?: return
+        val className = event.className?.toString() ?: ""
 
-        if (className.contains("Dialog") || className.contains("AlertDialog")) {
+        val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
+                            className.contains("AlertDialog", ignoreCase = true) ||
+                            className.contains("Ussd", ignoreCase = true) ||
+                            className.contains("Phone", ignoreCase = true) ||
+                            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+
+        if (isDialogEvent) {
             if (isProcessingDialog) return
 
             val rootNode = rootInActiveWindow ?: return
@@ -101,46 +108,66 @@ class GeeshAccessibilityService : AccessibilityService() {
 
             if (dialogText.isBlank()) return
 
-            Log.d("GeeshAccessibility", "USSD Dialog detected: $dialogText")
-
-            val hasInput = findEditText(rootNode) != null
             val hasRepliesLeft = synchronized(replyQueue) { replyQueue.isNotEmpty() }
 
-            if (hasInput && hasRepliesLeft) {
+            if (hasRepliesLeft) {
+                // We are expecting an input dialog to enter a reply/PIN
+                isProcessingDialog = true
                 val currentReply = synchronized(replyQueue) {
                     if (replyQueue.isNotEmpty()) replyQueue.removeAt(0) else null
-                } ?: return
+                } ?: run {
+                    isProcessingDialog = false
+                    return
+                }
 
-                isProcessingDialog = true
-                Log.d("GeeshAccessibility", "Submitting USSD reply (remaining: ${replyQueue.size}): $currentReply")
+                Log.d("GeeshAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    delay(1500) // Wait for dialog to settle
+                    // Poll for up to 2.5 seconds (every 250ms) to allow the EditText to inflate
+                    var targetNode: AccessibilityNodeInfo? = null
+                    var attempts = 0
+                    while (attempts < 10) {
+                        delay(250)
+                        val freshRoot = rootInActiveWindow
+                        if (freshRoot != null) {
+                            val edit = findEditText(freshRoot)
+                            if (edit != null) {
+                                targetNode = freshRoot
+                                break
+                            }
+                        }
+                        attempts++
+                    }
 
-                    val freshNode = rootInActiveWindow
-                    if (freshNode != null) {
-                        val ok = fillAndSubmit(freshNode, currentReply)
+                    if (targetNode != null) {
+                        Log.d("GeeshAccessibility", "EditText ready after ${attempts * 250}ms. Submitting reply: $currentReply")
+                        val ok = fillAndSubmit(targetNode, currentReply)
                         Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
-                        Log.e("GeeshAccessibility", "No window node available after delay")
+                        Log.w("GeeshAccessibility", "No EditText found after waiting 2.5s. Treating as alert/result dialog.")
+                        val freshRoot = rootInActiveWindow ?: rootNode
+                        val text = extractText(freshRoot).ifBlank { dialogText }
+                        clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
+                        _ussdDialogFlow.tryEmit(text)
                     }
 
                     delay(800)
                     isProcessingDialog = false
                 }
             } else {
-                // No pending reply or dialog has no input field — this is the final confirmation or an alert.
+                // No pending reply — this is the final confirmation or result dialog
                 isProcessingDialog = true
-                Log.d("GeeshAccessibility", "Final or alert dialog detected. Dismissing...")
-
-                // Clear any remaining queue if dialog appeared without input
-                clearReplies()
-
-                clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
-                _ussdDialogFlow.tryEmit(dialogText)
+                Log.d("GeeshAccessibility", "Final USSD dialog detected: $dialogText. Dismissing in 1s...")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    delay(800)
+                    delay(800) // Give user/screen time to settle
+                    val freshRoot = rootInActiveWindow ?: rootNode
+                    val finalText = extractText(freshRoot).ifBlank { dialogText }
+
+                    clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
+                    _ussdDialogFlow.tryEmit(finalText)
+
+                    delay(600)
                     isProcessingDialog = false
                 }
             }
@@ -218,6 +245,17 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     private fun clickButton(node: AccessibilityNodeInfo, labels: List<String>): Boolean {
+        // 1. Try standard Android positive button IDs first
+        val standardBtnIds = listOf("android:id/button1", "com.android.phone:id/button1")
+        for (id in standardBtnIds) {
+            val btns = node.findAccessibilityNodeInfosByViewId(id)
+            for (btn in btns) {
+                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+            }
+        }
+
+        // 2. Try text labels
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
             for (btn in buttons) {
