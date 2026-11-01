@@ -10,7 +10,7 @@ import com.geesh.app.parser.GeeshSmsParser
 
 /**
  * Listens for incoming SMS messages.
- * Only processes messages from sender "898" (Adeega Sarifka).
+ * Only processes messages from sender "898" (Telesom / Adeega Sarifka).
  */
 class GeeshSmsReceiver : BroadcastReceiver() {
 
@@ -28,14 +28,24 @@ class GeeshSmsReceiver : BroadcastReceiver() {
         for ((sender, msgs) in bySender) {
             if (sender == null) continue
 
-            // ONLY process SMS from sender "898" (Telesom/Adeega Sarifka)
-            if (sender.trim() != "898") {
-                Log.d("GeeshSmsReceiver", "Ignored SMS from non-898 sender: $sender")
+            val cleanSender = sender.trim()
+            // ONLY process SMS from sender containing "898" (e.g. "898", "+252898")
+            if (cleanSender != "898" && !cleanSender.endsWith("898")) {
+                Log.d("GeeshSmsReceiver", "Ignored SMS from non-898 sender: $cleanSender")
                 continue
             }
 
             val body = msgs.joinToString("") { it.messageBody ?: "" }
-            Log.d("GeeshSmsReceiver", "SMS from 898: $body")
+            Log.d("GeeshSmsReceiver", "SMS from 898 received: $body")
+
+            // Critical: ALWAYS update lastSmsReceivedTimestamp when ANY 898 message arrives!
+            // This resets the auto-check balance timer to prevent unnecessary balance checks.
+            try {
+                LocalPrefs(context).lastSmsReceivedTimestamp = System.currentTimeMillis()
+                Log.d("GeeshSmsReceiver", "Reset lastSmsReceivedTimestamp because 898 SMS arrived")
+            } catch (e: Exception) {
+                Log.w("GeeshSmsReceiver", "Failed to update lastSmsReceivedTimestamp: ${e.message}")
+            }
 
             val parsed = parser.parse(body)
             if (parsed == null) {
@@ -44,11 +54,6 @@ class GeeshSmsReceiver : BroadcastReceiver() {
             }
 
             Log.d("GeeshSmsReceiver", "Parsed: amount=\$${parsed.amountDollar}, tixraac=${parsed.tixraac}")
-
-            // Update last SMS received timestamp to reset auto-check balance timer
-            try {
-                LocalPrefs(context).lastSmsReceivedTimestamp = System.currentTimeMillis()
-            } catch (_: Exception) {}
 
             // Start the processing service
             val serviceIntent = Intent(context, GeeshForegroundService::class.java).apply {
