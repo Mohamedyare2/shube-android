@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Collections
 
@@ -23,9 +22,9 @@ import java.util.Collections
  * Supports:
  *  - Both Direct Card mode (1 reply/PIN) and Bank Account mode (up to 7 sequential replies)
  *  - Works seamlessly while device is locked (Lock Screen / Keyguard active)
- *  - Polls for the EditText input field (up to 10 seconds)
- *  - Multi-window search for USSD dialogs over the Keyguard
- *  - Emits the final dialog response for success/failure analysis
+ *  - Strict session gating: NEVER interferes with other apps when no USSD is active
+ *  - Ignores all non-telephony applications (TikTok, WhatsApp, etc.)
+ *  - Captures the final dialog response accurately for success/failure analysis
  */
 class GeeshAccessibilityService : AccessibilityService() {
 
@@ -37,7 +36,19 @@ class GeeshAccessibilityService : AccessibilityService() {
         // Queue of sequential replies for USSD dialogs
         private val replyQueue = Collections.synchronizedList(mutableListOf<String>())
 
-        // The reply the service should type next (backward-compatible with single reply)
+        // Active USSD session flag. When FALSE, this service ignores ALL screen events completely.
+        @Volatile
+        var isUssdSessionActive = false
+            private set
+
+        // Guard against the same dialog firing multiple accessibility events
+        @Volatile
+        var isProcessingDialog = false
+
+        var isServiceActive = false
+            private set
+
+        // Backward-compatible single reply accessor
         var nextReply: String?
             get() = synchronized(replyQueue) { replyQueue.firstOrNull() }
             set(value) {
@@ -50,28 +61,40 @@ class GeeshAccessibilityService : AccessibilityService() {
             }
 
         /**
-          Sets multiple replies for a multi-step USSD session.
+         * Starts an active USSD session with the given sequential replies.
          */
-        fun setReplies(replies: List<String>) {
+        fun startSession(replies: List<String>) {
             synchronized(replyQueue) {
                 replyQueue.clear()
                 replyQueue.addAll(replies.filter { it.isNotBlank() })
             }
-            Log.d("GeeshAccessibility", "Queued ${replyQueue.size} USSD replies: $replies")
+            isProcessingDialog = false
+            isUssdSessionActive = true
+            Log.d("GeeshAccessibility", "USSD Session STARTED with ${replyQueue.size} replies: $replies")
         }
 
-        fun clearReplies() {
+        /**
+         * Backward-compatible setter for replies (also starts session).
+         */
+        fun setReplies(replies: List<String>) {
+            startSession(replies)
+        }
+
+        /**
+         * Stops the USSD session and clears any remaining replies.
+         */
+        fun stopSession() {
             synchronized(replyQueue) {
                 replyQueue.clear()
             }
+            isProcessingDialog = false
+            isUssdSessionActive = false
+            Log.d("GeeshAccessibility", "USSD Session STOPPED")
         }
 
-        // Guard against the same dialog firing multiple accessibility events
-        @Volatile
-        var isProcessingDialog = false
-
-        var isServiceActive = false
-            private set
+        fun clearReplies() {
+            stopSession()
+        }
     }
 
     override fun onServiceConnected() {
@@ -85,13 +108,35 @@ class GeeshAccessibilityService : AccessibilityService() {
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         isServiceActive = true
-        Log.d("GeeshAccessibility", "Accessibility service connected with interactive window retrieval")
+        Log.d("GeeshAccessibility", "Accessibility service connected (Strict session mode active)")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        val className = event.className?.toString() ?: ""
 
+        // ── 1. STRICT SESSION GUARD ──────────────────────────────────────────
+        // If the app is not currently running an active USSD session, do NOT touch anything!
+        // This completely prevents erratic app switching or hijacking TikTok / other apps.
+        if (!isUssdSessionActive) {
+            return
+        }
+
+        // ── 2. PACKAGE FILTER ────────────────────────────────────────────────
+        // Block known third-party user apps so we never touch or focus them
+        val pkg = event.packageName?.toString()?.lowercase() ?: ""
+        if (pkg.contains("tiktok") ||
+            pkg.contains("musically") ||
+            pkg.contains("whatsapp") ||
+            pkg.contains("facebook") ||
+            pkg.contains("instagram") ||
+            pkg.contains("chrome") ||
+            pkg.contains("youtube") ||
+            pkg.contains("launcher") ||
+            pkg.contains("home")) {
+            return
+        }
+
+        val className = event.className?.toString() ?: ""
         val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
                             className.contains("AlertDialog", ignoreCase = true) ||
                             className.contains("Ussd", ignoreCase = true) ||
@@ -105,7 +150,7 @@ class GeeshAccessibilityService : AccessibilityService() {
             val dialogText = extractText(rootNode)
             val lower = dialogText.lowercase()
 
-            // Skip system "processing…" dialogs — they don't need a reply
+            // Skip system loading/progress dialogs ("USSD code running...", "MMI code started", etc.)
             if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
                 Log.d("GeeshAccessibility", "Skipping loading dialog: $dialogText")
                 return
@@ -128,14 +173,15 @@ class GeeshAccessibilityService : AccessibilityService() {
                 Log.d("GeeshAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    // Poll for up to 10 seconds (every 250ms, 40 attempts) to allow the EditText to inflate
+                    // Poll for up to 10 seconds (every 250ms, 40 attempts) for the EditText to inflate
                     var targetNode: AccessibilityNodeInfo? = null
                     var attempts = 0
-                    while (attempts < 40) {
+                    while (attempts < 40 && isUssdSessionActive) {
                         delay(250)
                         val freshRoot = rootInActiveWindow ?: findUssdRootNode()
                         if (freshRoot != null) {
-                            val edit = findEditText(freshRoot)
+                            val edit = freshRoot.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+                                ?: findEditText(freshRoot)
                             if (edit != null) {
                                 targetNode = freshRoot
                                 break
@@ -145,55 +191,65 @@ class GeeshAccessibilityService : AccessibilityService() {
                     }
 
                     if (targetNode != null) {
-                        Log.d("GeeshAccessibility", "EditText ready after ${attempts * 250}ms. Submitting reply: $currentReply")
+                        Log.d("GeeshAccessibility", "EditText ready after ${attempts * 250}ms. Submitting: $currentReply")
                         val ok = fillAndSubmit(targetNode, currentReply)
                         Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
                         Log.w("GeeshAccessibility", "No EditText found after waiting 10s. Treating as alert/result dialog.")
                         val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
                         val text = extractText(freshRoot).ifBlank { dialogText }
-                        clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                         _ussdDialogFlow.tryEmit(text)
+                        clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                     }
 
-                    delay(800)
+                    // Short delay to quickly accept the next incoming dialog
+                    delay(200)
                     isProcessingDialog = false
                 }
             } else {
-                // No pending reply — this is the final confirmation or result dialog
+                // No pending replies — this is the final confirmation or result dialog
                 isProcessingDialog = true
-                Log.d("GeeshAccessibility", "Final USSD dialog detected: $dialogText. Dismissing in 1s...")
+                Log.d("GeeshAccessibility", "Final USSD dialog detected: $dialogText")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    delay(800) // Give user/screen time to settle
                     val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
                     val finalText = extractText(freshRoot).ifBlank { dialogText }
 
-                    clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
+                    // Critical: Emit to flow FIRST so result text is captured before dialog closes
                     _ussdDialogFlow.tryEmit(finalText)
+                    Log.d("GeeshAccessibility", "Emitted final USSD result: $finalText")
 
-                    delay(600)
+                    delay(300)
+                    clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
+
+                    delay(300)
                     isProcessingDialog = false
                 }
             }
         }
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
-
     /**
-     * Searches across all active interactive windows (especially useful when phone is locked).
+     * Searches across active interactive windows for a verified USSD dialog root node.
+     * Only returns a node if it contains an actual input ID or recognized USSD/telecom terms.
      */
     private fun findUssdRootNode(): AccessibilityNodeInfo? {
         val windowList = try { windows } catch (_: Exception) { emptyList<AccessibilityWindowInfo>() }
         for (w in windowList) {
             val root = w.root ?: continue
-            val edit = findEditText(root)
-            if (edit != null) return root
+
+            // 1. Check for standard Android USSD input view ID
+            val editTexts = root.findAccessibilityNodeInfosByViewId("android:id/input")
+            if (editTexts.isNotEmpty()) return root
+
+            // 2. Or check for explicit telecom / USSD dialog keywords
             val text = extractText(root).lowercase()
-            if (text.contains("shub") || text.contains("geli") || text.contains("pin") ||
-                text.contains("lacag") || text.contains("hadhaaga") || text.contains("haraaga") ||
-                text.contains("dhigatay") || text.contains("dirtay") || text.contains("guul")) {
+            if (text.contains("zaad") || text.contains("shub") || text.contains("geli") ||
+                text.contains("pin") || text.contains("lacag") || text.contains("hadhaag") ||
+                text.contains("haraag") || text.contains("dhigatay") || text.contains("dirtay") ||
+                text.contains("guul") || text.contains("sarif") || text.contains("telesom") ||
+                text.contains("sahal") || text.contains("edahab") || text.contains("mmi") ||
+                text.contains("ussd")) {
                 return root
             }
         }
@@ -210,14 +266,8 @@ class GeeshAccessibilityService : AccessibilityService() {
 
     /**
      * Enters [text] into the USSD reply dialog and presses Send.
-     *
-     * Strategy:
-     *  1. Find the EditText -> focus it -> copy [text] to clipboard -> paste
-     *  2. If paste didn't populate the field, fall back to ACTION_SET_TEXT
-     *  3. Click SEND / OK button
      */
     private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
-        // ── 1. Find the input field ──────────────────────────────────────────
         val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
         val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
 
@@ -226,34 +276,26 @@ class GeeshAccessibilityService : AccessibilityService() {
             return false
         }
 
-        // ── 2. Focus the field ───────────────────────────────────────────────
         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        delay(300)
-
-        // ── 3. Copy reply to clipboard ───────────────────────────────────────
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
-        Log.d("GeeshAccessibility", "Reply copied to clipboard: $text")
         delay(200)
 
-        // ── 4. Paste into field ──────────────────────────────────────────────
-        val pasted = target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-        Log.d("GeeshAccessibility", "Paste action result: $pasted")
-        delay(300)
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+        delay(150)
 
-        // ── 5. Fallback: if paste didn't work, use ACTION_SET_TEXT ───────────
+        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        delay(200)
+
         val currentText = target.text?.toString() ?: ""
         if (currentText.isBlank()) {
-            Log.d("GeeshAccessibility", "Paste didn't populate field — trying ACTION_SET_TEXT")
             val bundle = android.os.Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
             target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-            delay(300)
+            delay(200)
         }
 
-        // ── 6. Click SEND ────────────────────────────────────────────────────
         val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir"))
         Log.d("GeeshAccessibility", "Send button clicked: $sent")
         return sent
@@ -269,7 +311,6 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     private fun clickButton(node: AccessibilityNodeInfo, labels: List<String>): Boolean {
-        // 1. Try standard Android positive button IDs first
         val standardBtnIds = listOf("android:id/button1", "com.android.phone:id/button1")
         for (id in standardBtnIds) {
             val btns = node.findAccessibilityNodeInfosByViewId(id)
@@ -279,7 +320,6 @@ class GeeshAccessibilityService : AccessibilityService() {
             }
         }
 
-        // 2. Try text labels
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
             for (btn in buttons) {
@@ -293,6 +333,7 @@ class GeeshAccessibilityService : AccessibilityService() {
     override fun onInterrupt() { Log.w("GeeshAccessibility", "Service interrupted") }
 
     override fun onDestroy() {
+        stopSession()
         isServiceActive = false
         super.onDestroy()
     }
