@@ -1,8 +1,10 @@
 package com.geesh.app.service
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -18,6 +20,7 @@ import com.geesh.app.ussd.GeeshAccessibilityService
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import java.util.Collections
 
 data class PaymentTask(
     val amount: Double,
@@ -32,9 +35,9 @@ data class PaymentTask(
  *  1. Receives parsed SMS messages and puts them into a strict FIFO queue.
  *  2. Processes transactions sequentially in order of arrival (first-come, first-served).
  *  3. Supports both CARD mode (direct USSD) and BANK mode (*800# deposit flow).
- *  4. Retries failed USSD transfers automatically with fast, non-blocking timeouts.
+ *  4. Single-execution guarantee: NEVER sends duplicate/retry payments blindly.
  *  5. Automatically checks card balance via *801# when no 898 SMS is received for user-defined interval,
- *     and sweeps any balance >= $0.12 into the active payment channel.
+ *     using AlarmManager to reliably wake up even in deep Android Doze mode.
  */
 class GeeshForegroundService : Service() {
 
@@ -44,6 +47,9 @@ class GeeshForegroundService : Service() {
     // FIFO Queue for incoming payment requests
     private val paymentQueue = Channel<PaymentTask>(Channel.UNLIMITED)
 
+    // In-memory set of currently active/queued tixraacs to prevent duplicate execution
+    private val activeTixraacs = Collections.synchronizedSet(mutableSetOf<String>())
+
     // Guard against concurrent USSD operations
     @Volatile
     private var isBusyProcessing = false
@@ -51,14 +57,14 @@ class GeeshForegroundService : Service() {
     private var lastBalanceCheckTimestamp = 0L
 
     companion object {
-        const val ACTION_PROCESS_SMS   = "com.geesh.app.action.PROCESS_SMS"
-        const val ACTION_START_SERVICE = "com.geesh.app.action.START_SERVICE"
-        const val ACTION_STOP_SERVICE  = "com.geesh.app.action.STOP_SERVICE"
+        const val ACTION_PROCESS_SMS      = "com.geesh.app.action.PROCESS_SMS"
+        const val ACTION_START_SERVICE    = "com.geesh.app.action.START_SERVICE"
+        const val ACTION_STOP_SERVICE     = "com.geesh.app.action.STOP_SERVICE"
+        const val ACTION_CHECK_INACTIVITY = "com.geesh.app.action.CHECK_INACTIVITY"
 
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID      = "geesh_service_channel"
 
-        // Realistic telecom timeouts (ms) - prevents blocking queue for minutes
         private const val CARD_DIALOG_TIMEOUT_MS = 35_000L
         private const val BANK_DIALOG_TIMEOUT_MS = 90_000L
         private const val BALANCE_CHECK_TIMEOUT_MS = 30_000L
@@ -71,23 +77,27 @@ class GeeshForegroundService : Service() {
         createNotificationChannel()
         startQueueWorker()
         startInactivityTimer()
+        scheduleNextInactivityAlarm()
     }
 
     /**
      * Sequential FIFO Worker:
      * Takes one transaction from the queue at a time, completes its full USSD cycle,
-     * retries if needed, waits a short cool-down, then takes the next one.
+     * waits a short cool-down, then takes the next one.
      */
     private fun startQueueWorker() {
         scope.launch {
             for (task in paymentQueue) {
                 isBusyProcessing = true
                 try {
-                    processPaymentWithRetry(task.amount, task.amountFormatted, task.tixraac, task.smsBody)
+                    processPayment(task.amount, task.amountFormatted, task.tixraac, task.smsBody)
                 } catch (e: Exception) {
                     Log.e("GeeshService", "Error processing task for ${task.tixraac}", e)
                 } finally {
                     isBusyProcessing = false
+                    if (task.tixraac.isNotEmpty()) {
+                        activeTixraacs.remove(task.tixraac)
+                    }
                 }
                 // Short cool-down pause so telecom network & dialer UI settle before next USSD
                 delay(3_000)
@@ -96,36 +106,67 @@ class GeeshForegroundService : Service() {
     }
 
     /**
-     * Inactivity Timer:
-     * Periodically monitors time since last 898 SMS was received.
-     * If no 898 SMS received for the selected interval (5m - 60m), dials *801# to check balance.
+     * Coroutine timer loop for when the device is actively awake.
      */
     private fun startInactivityTimer() {
         scope.launch {
             while (isActive) {
                 delay(30_000) // check every 30 seconds
                 try {
-                    val prefs = LocalPrefs(this@GeeshForegroundService)
-                    if (!prefs.autoCheckBalanceEnabled) continue
-
-                    val balancePin = prefs.balanceCheckPin?.trim()
-                    if (balancePin.isNullOrBlank()) continue
-
-                    val intervalMs = prefs.checkBalanceIntervalMinutes * 60 * 1000L
-                    val now = System.currentTimeMillis()
-                    val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
-                    val timeSinceLastCheck = now - lastBalanceCheckTimestamp
-
-                    if (timeSinceLastSms >= intervalMs && timeSinceLastCheck >= intervalMs) {
-                        if (isBusyProcessing) {
-                            Log.d("GeeshService", "Auto-check postponed: USSD payment currently in progress")
-                            continue
-                        }
-                        performAutoBalanceCheck(balancePin)
-                    }
+                    checkInactivityAndTriggerBalance()
                 } catch (e: Exception) {
-                    Log.e("GeeshService", "Error in auto-check balance timer", e)
+                    Log.e("GeeshService", "Error in auto-check balance timer loop", e)
                 }
+            }
+        }
+    }
+
+    /**
+     * Schedules an exact AlarmManager alarm that survives Android Doze Mode.
+     * Fires every minute to ensure the 5-minute (or selected) interval is exact even while locked.
+     */
+    private fun scheduleNextInactivityAlarm() {
+        try {
+            val alarmMgr = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+            val intent = Intent(this, GeeshForegroundService::class.java).apply {
+                action = ACTION_CHECK_INACTIVITY
+            }
+            val pending = PendingIntent.getService(
+                this,
+                2002,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val triggerTime = System.currentTimeMillis() + 60_000L // 1 minute
+            alarmMgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pending)
+        } catch (e: Exception) {
+            Log.w("GeeshService", "Could not set inactivity alarm: ${e.message}")
+        }
+    }
+
+    /**
+     * Checks if enough time has elapsed since the last 898 SMS without any transaction,
+     * and triggers *801# balance check if condition is met.
+     */
+    private fun checkInactivityAndTriggerBalance() {
+        val prefs = LocalPrefs(this)
+        if (!prefs.autoCheckBalanceEnabled) return
+
+        val balancePin = prefs.balanceCheckPin?.trim()
+        if (balancePin.isNullOrBlank()) return
+
+        val intervalMs = prefs.checkBalanceIntervalMinutes * 60 * 1000L
+        val now = System.currentTimeMillis()
+        val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
+        val timeSinceLastCheck = now - lastBalanceCheckTimestamp
+
+        if (timeSinceLastSms >= intervalMs && timeSinceLastCheck >= intervalMs) {
+            if (isBusyProcessing) {
+                Log.d("GeeshService", "Auto-check postponed: USSD payment currently in progress")
+                return
+            }
+            scope.launch {
+                performAutoBalanceCheck(balancePin)
             }
         }
     }
@@ -138,10 +179,15 @@ class GeeshForegroundService : Service() {
             ACTION_START_SERVICE -> {
                 if (fgType != 0) startForeground(NOTIFICATION_ID, buildNotification("Geesh Active", "Dhagaysanaya fariimaha..."), fgType)
                 else startForeground(NOTIFICATION_ID, buildNotification("Geesh Active", "Dhagaysanaya fariimaha..."))
+                scheduleNextInactivityAlarm()
             }
             ACTION_STOP_SERVICE -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+            }
+            ACTION_CHECK_INACTIVITY -> {
+                checkInactivityAndTriggerBalance()
+                scheduleNextInactivityAlarm()
             }
             ACTION_PROCESS_SMS -> {
                 if (fgType != 0) startForeground(NOTIFICATION_ID, buildNotification("Geesh", "Fariin cusub baa timid..."), fgType)
@@ -152,6 +198,14 @@ class GeeshForegroundService : Service() {
                 val tixraac = intent.getStringExtra("tixraac") ?: ""
                 val smsBody = intent.getStringExtra("sms_body") ?: ""
 
+                // Prevent duplicate processing if same tixraac is already queued
+                if (tixraac.isNotEmpty()) {
+                    if (!activeTixraacs.add(tixraac)) {
+                        Log.w("GeeshService", "Tixraac $tixraac is already queued — ignoring duplicate intent")
+                        return START_STICKY
+                    }
+                }
+
                 val task = PaymentTask(amount, amountFormatted, tixraac, smsBody)
                 val sent = paymentQueue.trySend(task)
                 Log.d("GeeshService", "Enqueued payment task: tixraac=$tixraac, amount=$amount, success=${sent.isSuccess}")
@@ -161,25 +215,28 @@ class GeeshForegroundService : Service() {
         return START_STICKY
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────────
 
-    private suspend fun processPaymentWithRetry(amount: Double, amountFormatted: String, tixraac: String, smsBody: String) {
+    /**
+     * Executes a single transfer for the given task.
+     * Guaranteed NO BLIND RETRIES: Financial transactions are dialed only once.
+     */
+    private suspend fun processPayment(amount: Double, amountFormatted: String, tixraac: String, smsBody: String) {
         val db  = GeeshDatabase.getInstance(this)
         val dao = db.transactionDao()
 
         Log.d("GeeshService", "Processing payment: \$$amount (formatted: $amountFormatted), tixraac=$tixraac")
 
-        // ── Duplicate check ───────────────────────────────────────────────────
+        // Database duplicate check
         if (tixraac.isNotEmpty()) {
             val existing = dao.findByTixraac(tixraac)
-            if (existing != null && existing.ussdResult == "success") {
-                Log.w("GeeshService", "Duplicate Tixraac $tixraac — already successfully processed. Skipping.")
+            if (existing != null && (existing.ussdResult == "success" || existing.ussdResult == "pending")) {
+                Log.w("GeeshService", "Duplicate Tixraac $tixraac already exists in DB (${existing.ussdResult}). Skipping.")
                 notify("Geesh", "Tixraac $tixraac horay baa loo diray — la iska daayay")
                 return
             }
         }
 
-        // ── Save / Update in DB as pending ────────────────────────────────────
         val record = ProcessedTransaction(
             tixraac      = tixraac.ifEmpty { "NO_TIXRAAC_${System.currentTimeMillis()}" },
             amountDollar = amount,
@@ -188,7 +245,6 @@ class GeeshForegroundService : Service() {
         )
         dao.insert(record)
 
-        // ── Check Accessibility Service ───────────────────────────────────────
         if (!GeeshAccessibilityService.isServiceActive) {
             Log.e("GeeshService", "Accessibility service is NOT active. Cannot enter replies automatically.")
             notify("⚠️ Geesh", "Accessibility Service ma shaqaynayso! Fur Settings si aad u shiddo.")
@@ -199,33 +255,11 @@ class GeeshForegroundService : Service() {
         val prefs = LocalPrefs(this)
         val isBankMode = prefs.paymentMode.equals("BANK", ignoreCase = true)
 
-        var finalResult = "failed"
-        var finalDialog = ""
-
-        // Try up to 2 attempts (initial attempt + 1 retry if failed)
-        for (attempt in 1..2) {
-            if (attempt > 1) {
-                Log.w("GeeshService", "Payment attempt 1 did not succeed. Waiting 3s before RETRY attempt 2 for $tixraac...")
-                notify("⚠️ Geesh", "USSD mar labaad ayaa la isku dayayaa (\$$amount)...")
-                delay(3_000)
-            }
-
-            val (resultStatus, dialogText) = executeSingleTransfer(isBankMode, prefs, amount, amountFormatted)
-            finalResult = resultStatus
-            finalDialog = dialogText
-
-            if (resultStatus == "success") {
-                Log.d("GeeshService", "Payment succeeded on attempt $attempt: $dialogText")
-                break
-            }
-            if (resultStatus == "failed_accessibility" || resultStatus == "failed_missing_pins") {
-                // Do not retry on broken configuration
-                break
-            }
-        }
+        // Single execution: Dial USSD once and capture true outcome
+        val (finalResult, finalDialog) = executeSingleTransfer(isBankMode, prefs, amount, amountFormatted)
 
         dao.updateResult(record.tixraac, finalResult)
-        val icon = if (finalResult == "success") "✅" else "❌"
+        val icon = if (finalResult == "success") "✅" else "⚠️"
         notify("$icon Geesh", "Natiijada: $finalResult | \$$amount | $finalDialog".take(80))
     }
 
@@ -255,13 +289,13 @@ class GeeshForegroundService : Service() {
 
                 if (pinHore.isNullOrBlank() || bankPin.isNullOrBlank()) {
                     Log.e("GeeshService", "Bank PIN-yada lama buuxin! Initial PIN ama Bank PIN waa maran.")
-                    notify("❌ Geesh", "Bank PIN lama buuxin! Fadlan geli PIN-ka Hore iyo Bank PIN.")
+                    notify("⚠️ Geesh", "Bank PIN lama buuxin! Fadlan geli PIN-ka Hore iyo Bank PIN.")
                     return Pair("failed_missing_pins", "Bank PIN-yada lama helin")
                 }
 
                 ussdCodeToDial = "*800#"
 
-                // In Bank Account mode, amount is entered into a standard reply field with dot (e.g. "0.5")
+                // In Bank Account mode, amount uses dot notation (e.g. "0.5")
                 val bankAmount = if (amount % 1.0 == 0.0) {
                     amount.toLong().toString()
                 } else {
@@ -278,7 +312,8 @@ class GeeshForegroundService : Service() {
                     "1"
                 )
 
-                GeeshAccessibilityService.setReplies(bankReplies)
+                // Start active USSD session in Accessibility service
+                GeeshAccessibilityService.startSession(bankReplies)
                 Log.d("GeeshService", "Dialing Bank USSD: *800# with amount=$bankAmount (replies: $bankReplies)")
                 notify("Geesh 🏦", "Bank: *800# (\$$bankAmount) diraya...")
 
@@ -295,9 +330,9 @@ class GeeshForegroundService : Service() {
                 ussdCodeToDial = code
 
                 if (ussdReply != null && !template.contains("{pin}")) {
-                    GeeshAccessibilityService.setReplies(listOf(ussdReply))
+                    GeeshAccessibilityService.startSession(listOf(ussdReply))
                 } else {
-                    GeeshAccessibilityService.clearReplies()
+                    GeeshAccessibilityService.startSession(emptyList())
                 }
 
                 Log.d("GeeshService", "Dialing Card USSD: $ussdCodeToDial")
@@ -324,14 +359,14 @@ class GeeshForegroundService : Service() {
             return Pair(status, resultText)
 
         } finally {
+            // Always stop session so accessibility service returns to completely dormant state
+            GeeshAccessibilityService.stopSession()
             if (wl?.isHeld == true) try { wl.release() } catch (_: Exception) {}
         }
     }
 
     /**
-     * Determines if the transfer succeeded based on exact telecom confirmation phrases:
-     *  - Bank mode: contains "waxaad lacag dhigatay", "dhigatay", "lagu shubay", etc.
-     *  - Direct Card mode: contains "waxaad" and "dirtay", "u dirtay", "la diray", "guul", etc.
+     * Determines if the transfer succeeded based on comprehensive telecom confirmation phrases.
      */
     private fun isTransferSuccessful(isBankMode: Boolean, dialogText: String): Boolean {
         val lower = dialogText.lowercase()
@@ -339,7 +374,8 @@ class GeeshForegroundService : Service() {
         // 1. Explicit failure keywords
         val failureKeywords = listOf(
             "khalad", "failed", "error", "maku filna", "ma haysatid", "kuma filna",
-            "ma shaqaynayo", "invalid", "lama heli karo", "waqtigu wuu dhamaaday", "cancelled"
+            "ma shaqaynayo", "invalid", "lama heli karo", "waqtigu wuu dhamaaday",
+            "cancelled", "la kansalay", "waa la joojiyay"
         )
         if (failureKeywords.any { lower.contains(it) }) {
             return false
@@ -353,18 +389,25 @@ class GeeshForegroundService : Service() {
             lower.contains("lagu shubay") ||
             lower.contains("ku shubtay") ||
             lower.contains("xisaabta") ||
+            lower.contains("xisaabtaada") ||
+            lower.contains("u wareejisay") ||
+            lower.contains("wareejisay") ||
             lower.contains("guul") ||
             lower.contains("success")
         } else {
             (lower.contains("waxaad") && lower.contains("dirtay")) ||
             (lower.contains("waxaad") && lower.contains("wareejisay")) ||
             lower.contains("u dirtay") ||
+            lower.contains("dirtay") ||
             lower.contains("la diray") ||
+            lower.contains("u wareejisay") ||
+            lower.contains("wareejisay") ||
             lower.contains("sent") ||
             lower.contains("guul") ||
             lower.contains("success") ||
             lower.contains("hadhaagaagu waa") ||
-            lower.contains("haraagaagu waa")
+            lower.contains("haraagaagu waa") ||
+            lower.contains("adeega sarifka")
         }
     }
 
@@ -394,7 +437,7 @@ class GeeshForegroundService : Service() {
             Log.d("GeeshService", "Triggering Auto Balance Check via *801#")
             notify("Geesh 🔍", "Hadhaaga ayaa la eegayaa (*801#)...")
 
-            GeeshAccessibilityService.setReplies(listOf(balancePin))
+            GeeshAccessibilityService.startSession(listOf(balancePin))
             dialUssd("*801#")
 
             val resultText = withTimeoutOrNull(BALANCE_CHECK_TIMEOUT_MS) {
@@ -419,7 +462,6 @@ class GeeshForegroundService : Service() {
                 Log.d("GeeshService", "Auto-sweep triggered! Balance \$${parsed.amountDollar} >= \$0.12")
                 notify("Geesh 💰", "Hadhaag la helay: \$${parsed.amountDollar} — Safka ayaa lagu daray!")
 
-                // Critical: Wait 2.5 seconds for previous *801# dialog to completely close on screen
                 delay(2500)
 
                 val task = PaymentTask(
@@ -438,12 +480,12 @@ class GeeshForegroundService : Service() {
         } catch (e: Exception) {
             Log.e("GeeshService", "Exception in performAutoBalanceCheck", e)
         } finally {
+            GeeshAccessibilityService.stopSession()
             if (wl?.isHeld == true) try { wl.release() } catch (_: Exception) {}
             isBusyProcessing = false
         }
     }
 
-    // ─── Dial USSD via phone call intent ─────────────────────────────────────
     private fun dialUssd(code: String) {
         if (checkSelfPermission(android.Manifest.permission.CALL_PHONE) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -458,7 +500,6 @@ class GeeshForegroundService : Service() {
         startActivity(intent)
     }
 
-    // ─── Notification helpers ─────────────────────────────────────────────────
     private fun notify(title: String, text: String) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIFICATION_ID, buildNotification(title, text))
@@ -476,16 +517,20 @@ class GeeshForegroundService : Service() {
     }
 
     private fun createNotificationChannel() {
-        val ch = NotificationChannel(CHANNEL_ID, "Geesh Service", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Geesh background payment processor"
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Geesh Automation Service",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Keeps the USSD payment automation running in the background"
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(ch)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.createNotificationChannel(channel)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        paymentQueue.close()
         job.cancel()
     }
 
