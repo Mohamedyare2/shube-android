@@ -22,9 +22,8 @@ import java.util.Collections
  * Supports:
  *  - Both Direct Card mode (1 reply/PIN) and Bank Account mode (up to 7 sequential replies)
  *  - Works seamlessly while device is locked (Lock Screen / Keyguard active)
- *  - Strict session gating: NEVER interferes with other apps when no USSD is active
- *  - Ignores all non-telephony applications (TikTok, WhatsApp, etc.)
- *  - Captures the final dialog response accurately for success/failure analysis
+ *  - 100% IMMUNITY: Never touches, inspects, clicks or steals focus from user apps (TikTok, WhatsApp, etc.)
+ *  - Strictly restricted to telephony and telecom system dialogs
  */
 class GeeshAccessibilityService : AccessibilityService() {
 
@@ -73,9 +72,6 @@ class GeeshAccessibilityService : AccessibilityService() {
             Log.d("GeeshAccessibility", "USSD Session STARTED with ${replyQueue.size} replies: $replies")
         }
 
-        /**
-         * Backward-compatible setter for replies (also starts session).
-         */
         fun setReplies(replies: List<String>) {
             startSession(replies)
         }
@@ -95,44 +91,70 @@ class GeeshAccessibilityService : AccessibilityService() {
         fun clearReplies() {
             stopSession()
         }
+
+        /**
+         * Verifies whether a given package name belongs to a verified Phone / Telecom system component.
+         * Explicitly rejects any social, media, browser, or user applications (e.g. TikTok, WhatsApp).
+         */
+        fun isTelephonyPackage(packageName: String?): Boolean {
+            if (packageName.isNullOrBlank()) return false
+            val lower = packageName.lowercase()
+
+            // 1. Explicitly blacklist all non-telephony apps
+            if (lower.contains("tiktok") ||
+                lower.contains("trill") ||
+                lower.contains("musically") ||
+                lower.contains("whatsapp") ||
+                lower.contains("facebook") ||
+                lower.contains("instagram") ||
+                lower.contains("youtube") ||
+                lower.contains("chrome") ||
+                lower.contains("browser") ||
+                lower.contains("launcher") ||
+                lower.contains("home") ||
+                lower.contains("shube") ||
+                lower.contains("geesh") ||
+                lower.contains("telegram") ||
+                lower.contains("snapchat")) {
+                return false
+            }
+
+            // 2. Allow only core telephony, dialer, and system dialog components
+            return lower.contains("phone") ||
+                   lower.contains("dialer") ||
+                   lower.contains("telecom") ||
+                   lower.contains("telephony") ||
+                   lower.contains("incall") ||
+                   lower == "android"
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                         AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         isServiceActive = true
-        Log.d("GeeshAccessibility", "Accessibility service connected (Strict session mode active)")
+        Log.d("GeeshAccessibility", "Accessibility service connected (Strict telephony-only mode)")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
         // ── 1. STRICT SESSION GUARD ──────────────────────────────────────────
-        // If the app is not currently running an active USSD session, do NOT touch anything!
-        // This completely prevents erratic app switching or hijacking TikTok / other apps.
+        // When no USSD session is actively running, IGNORE EVERYTHING completely.
         if (!isUssdSessionActive) {
             return
         }
 
-        // ── 2. PACKAGE FILTER ────────────────────────────────────────────────
-        // Block known third-party user apps so we never touch or focus them
-        val pkg = event.packageName?.toString()?.lowercase() ?: ""
-        if (pkg.contains("tiktok") ||
-            pkg.contains("musically") ||
-            pkg.contains("whatsapp") ||
-            pkg.contains("facebook") ||
-            pkg.contains("instagram") ||
-            pkg.contains("chrome") ||
-            pkg.contains("youtube") ||
-            pkg.contains("launcher") ||
-            pkg.contains("home")) {
+        // ── 2. PACKAGE WHITELIST GUARD ───────────────────────────────────────
+        // Only process events originating from the phone / dialer / system dialogs.
+        val pkg = event.packageName?.toString() ?: ""
+        if (!isTelephonyPackage(pkg)) {
             return
         }
 
@@ -146,7 +168,9 @@ class GeeshAccessibilityService : AccessibilityService() {
         if (isDialogEvent) {
             if (isProcessingDialog) return
 
-            val rootNode = rootInActiveWindow ?: findUssdRootNode() ?: return
+            val rootNode = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                ?: findUssdRootNode() ?: return
+
             val dialogText = extractText(rootNode)
             val lower = dialogText.lowercase()
 
@@ -161,7 +185,6 @@ class GeeshAccessibilityService : AccessibilityService() {
             val hasRepliesLeft = synchronized(replyQueue) { replyQueue.isNotEmpty() }
 
             if (hasRepliesLeft) {
-                // We are expecting an input dialog to enter a reply/PIN
                 isProcessingDialog = true
                 val currentReply = synchronized(replyQueue) {
                     if (replyQueue.isNotEmpty()) replyQueue.removeAt(0) else null
@@ -173,13 +196,14 @@ class GeeshAccessibilityService : AccessibilityService() {
                 Log.d("GeeshAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    // Poll for up to 10 seconds (every 250ms, 40 attempts) for the EditText to inflate
                     var targetNode: AccessibilityNodeInfo? = null
                     var attempts = 0
                     while (attempts < 40 && isUssdSessionActive) {
                         delay(250)
-                        val freshRoot = rootInActiveWindow ?: findUssdRootNode()
-                        if (freshRoot != null) {
+                        val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                            ?: findUssdRootNode()
+
+                        if (freshRoot != null && isTelephonyPackage(freshRoot.packageName?.toString())) {
                             val edit = freshRoot.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
                                 ?: findEditText(freshRoot)
                             if (edit != null) {
@@ -190,32 +214,31 @@ class GeeshAccessibilityService : AccessibilityService() {
                         attempts++
                     }
 
-                    if (targetNode != null) {
-                        Log.d("GeeshAccessibility", "EditText ready after ${attempts * 250}ms. Submitting: $currentReply")
+                    if (targetNode != null && isTelephonyPackage(targetNode.packageName?.toString())) {
+                        Log.d("GeeshAccessibility", "EditText ready. Submitting reply: $currentReply")
                         val ok = fillAndSubmit(targetNode, currentReply)
                         Log.d("GeeshAccessibility", "Reply submission result: $ok")
                     } else {
-                        Log.w("GeeshAccessibility", "No EditText found after waiting 10s. Treating as alert/result dialog.")
-                        val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
+                        Log.w("GeeshAccessibility", "No EditText found in telephony window after waiting 10s")
+                        val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                            ?: findUssdRootNode() ?: rootNode
                         val text = extractText(freshRoot).ifBlank { dialogText }
                         _ussdDialogFlow.tryEmit(text)
                         clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                     }
 
-                    // Short delay to quickly accept the next incoming dialog
                     delay(200)
                     isProcessingDialog = false
                 }
             } else {
-                // No pending replies — this is the final confirmation or result dialog
                 isProcessingDialog = true
                 Log.d("GeeshAccessibility", "Final USSD dialog detected: $dialogText")
 
                 CoroutineScope(Dispatchers.Main).launch {
-                    val freshRoot = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
+                    val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                        ?: findUssdRootNode() ?: rootNode
                     val finalText = extractText(freshRoot).ifBlank { dialogText }
 
-                    // Critical: Emit to flow FIRST so result text is captured before dialog closes
                     _ussdDialogFlow.tryEmit(finalText)
                     Log.d("GeeshAccessibility", "Emitted final USSD result: $finalText")
 
@@ -230,24 +253,29 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Searches across active interactive windows for a verified USSD dialog root node.
-     * Only returns a node if it contains an actual input ID or recognized USSD/telecom terms.
+     * Searches across interactive windows STRICTLY for telephony windows.
+     * Never inspects or returns windows belonging to user apps.
      */
     private fun findUssdRootNode(): AccessibilityNodeInfo? {
         val windowList = try { windows } catch (_: Exception) { emptyList<AccessibilityWindowInfo>() }
         for (w in windowList) {
             val root = w.root ?: continue
+            val rootPkg = root.packageName?.toString() ?: ""
+
+            // STRICT FILTER: If not a telephony package, SKIP completely!
+            if (!isTelephonyPackage(rootPkg)) {
+                continue
+            }
 
             // 1. Check for standard Android USSD input view ID
             val editTexts = root.findAccessibilityNodeInfosByViewId("android:id/input")
             if (editTexts.isNotEmpty()) return root
 
-            // 2. Or check for explicit telecom / USSD dialog keywords
+            // 2. Check for explicit telecom / USSD keywords
             val text = extractText(root).lowercase()
             if (text.contains("zaad") || text.contains("shub") || text.contains("geli") ||
-                text.contains("pin") || text.contains("lacag") || text.contains("hadhaag") ||
-                text.contains("haraag") || text.contains("dhigatay") || text.contains("dirtay") ||
-                text.contains("guul") || text.contains("sarif") || text.contains("telesom") ||
+                text.contains("hadhaag") || text.contains("haraag") || text.contains("dhigatay") ||
+                text.contains("dirtay") || text.contains("sarif") || text.contains("telesom") ||
                 text.contains("sahal") || text.contains("edahab") || text.contains("mmi") ||
                 text.contains("ussd")) {
                 return root
@@ -266,8 +294,15 @@ class GeeshAccessibilityService : AccessibilityService() {
 
     /**
      * Enters [text] into the USSD reply dialog and presses Send.
+     * Strictly verifies node belongs to a telephony package before doing any action.
      */
     private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
+        val nodePkg = node.packageName?.toString() ?: ""
+        if (!isTelephonyPackage(nodePkg)) {
+            Log.w("GeeshAccessibility", "Blocked fillAndSubmit on non-telephony package: $nodePkg")
+            return false
+        }
+
         val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
         val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
 
