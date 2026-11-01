@@ -72,6 +72,10 @@ class LocalPrefs(context: Context) {
         get() = prefs.getLong("last_sms_received_timestamp", System.currentTimeMillis())
         set(value) = prefs.edit().putLong("last_sms_received_timestamp", value).apply()
 
+    var lastBalanceCheckTimestamp: Long
+        get() = prefs.getLong("last_balance_check_timestamp", System.currentTimeMillis())
+        set(value) = prefs.edit().putLong("last_balance_check_timestamp", value).apply()
+
     /**
      * App Lock Screen Security Settings (Protects phone & app without blocking USSD)
      */
