@@ -54,8 +54,6 @@ class GeeshForegroundService : Service() {
     @Volatile
     private var isBusyProcessing = false
 
-    private var lastBalanceCheckTimestamp = 0L
-
     companion object {
         const val ACTION_PROCESS_SMS      = "com.geesh.app.action.PROCESS_SMS"
         const val ACTION_START_SERVICE    = "com.geesh.app.action.START_SERVICE"
@@ -99,7 +97,6 @@ class GeeshForegroundService : Service() {
                         activeTixraacs.remove(task.tixraac)
                     }
                 }
-                // Short cool-down pause so telecom network & dialer UI settle before next USSD
                 delay(3_000)
             }
         }
@@ -111,7 +108,7 @@ class GeeshForegroundService : Service() {
     private fun startInactivityTimer() {
         scope.launch {
             while (isActive) {
-                delay(30_000) // check every 30 seconds
+                delay(60_000) // check once a minute while awake
                 try {
                     checkInactivityAndTriggerBalance()
                 } catch (e: Exception) {
@@ -122,11 +119,13 @@ class GeeshForegroundService : Service() {
     }
 
     /**
-     * Schedules an exact AlarmManager alarm that survives Android Doze Mode.
-     * Fires every minute to ensure the 5-minute (or selected) interval is exact even while locked.
+     * Schedules the next exact AlarmManager alarm based on remaining time until the interval.
      */
     private fun scheduleNextInactivityAlarm() {
         try {
+            val prefs = LocalPrefs(this)
+            if (!prefs.autoCheckBalanceEnabled) return
+
             val alarmMgr = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
             val intent = Intent(this, GeeshForegroundService::class.java).apply {
                 action = ACTION_CHECK_INACTIVITY
@@ -137,7 +136,17 @@ class GeeshForegroundService : Service() {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            val triggerTime = System.currentTimeMillis() + 60_000L // 1 minute
+
+            val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(5)
+            val intervalMs = intervalMinutes * 60 * 1000L
+            val now = System.currentTimeMillis()
+
+            val remainingSms = intervalMs - (now - prefs.lastSmsReceivedTimestamp)
+            val remainingCheck = intervalMs - (now - prefs.lastBalanceCheckTimestamp)
+            val waitMs = maxOf(remainingSms, remainingCheck).coerceAtLeast(60_000L)
+
+            val triggerTime = now + waitMs
+            Log.d("GeeshService", "Scheduled next inactivity alarm in ${waitMs / 1000}s")
             alarmMgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pending)
         } catch (e: Exception) {
             Log.w("GeeshService", "Could not set inactivity alarm: ${e.message}")
@@ -155,16 +164,19 @@ class GeeshForegroundService : Service() {
         val balancePin = prefs.balanceCheckPin?.trim()
         if (balancePin.isNullOrBlank()) return
 
-        val intervalMs = prefs.checkBalanceIntervalMinutes * 60 * 1000L
+        val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(5)
+        val intervalMs = intervalMinutes * 60 * 1000L
         val now = System.currentTimeMillis()
         val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
-        val timeSinceLastCheck = now - lastBalanceCheckTimestamp
+        val timeSinceLastCheck = now - prefs.lastBalanceCheckTimestamp
 
         if (timeSinceLastSms >= intervalMs && timeSinceLastCheck >= intervalMs) {
             if (isBusyProcessing) {
                 Log.d("GeeshService", "Auto-check postponed: USSD payment currently in progress")
                 return
             }
+            // Update timestamp immediately to prevent re-entrant calls
+            prefs.lastBalanceCheckTimestamp = now
             scope.launch {
                 performAutoBalanceCheck(balancePin)
             }
@@ -246,7 +258,7 @@ class GeeshForegroundService : Service() {
         dao.insert(record)
 
         if (!GeeshAccessibilityService.isServiceActive) {
-            Log.e("GeeshService", "Accessibility service is NOT active. Cannot enter replies automatically.")
+            Log.e("GeeshService", "Accessibility service is NOT active.")
             notify("⚠️ Geesh", "Accessibility Service ma shaqaynayso! Fur Settings si aad u shiddo.")
             dao.updateResult(record.tixraac, "failed_accessibility")
             return
@@ -295,7 +307,6 @@ class GeeshForegroundService : Service() {
 
                 ussdCodeToDial = "*800#"
 
-                // In Bank Account mode, amount uses dot notation (e.g. "0.5")
                 val bankAmount = if (amount % 1.0 == 0.0) {
                     amount.toLong().toString()
                 } else {
@@ -421,7 +432,6 @@ class GeeshForegroundService : Service() {
         }
 
         isBusyProcessing = true
-        lastBalanceCheckTimestamp = System.currentTimeMillis()
 
         val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         @Suppress("DEPRECATION")
@@ -458,7 +468,6 @@ class GeeshForegroundService : Service() {
             }
 
             if (parsed.isSendable) {
-                // Balance is >= $0.12 — sweep it!
                 Log.d("GeeshService", "Auto-sweep triggered! Balance \$${parsed.amountDollar} >= \$0.12")
                 notify("Geesh 💰", "Hadhaag la helay: \$${parsed.amountDollar} — Safka ayaa lagu daray!")
 
