@@ -74,6 +74,9 @@ class UssdStateMachine(private val context: Context) {
         var lastCapturedDialogText: String? = null
         var lastCapturedTimestamp: Long = 0L
 
+        // ── TELEPHONY ISOLATION: activate accessibility service for this session ──
+        UssdAccessibilityService.startSession()
+
         try {
             for ((index, step) in steps.withIndex()) {
                 Log.d("UssdStateMachine", "Executing Step ${index + 1}: ${step.type}")
@@ -201,6 +204,9 @@ class UssdStateMachine(private val context: Context) {
                 rawResponseText = lastCapturedDialogText,
                 diagnosticReason = "Exception during USSD execution: ${e.message}"
             )
+        } finally {
+            // ── TELEPHONY ISOLATION: always stop session when done ────────────
+            UssdAccessibilityService.stopSession()
         }
     }
     
