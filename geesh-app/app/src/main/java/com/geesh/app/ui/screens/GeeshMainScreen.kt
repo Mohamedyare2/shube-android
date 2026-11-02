@@ -1146,7 +1146,9 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
 
                                 prefs.autoCheckBalanceEnabled = it
                                 if (it) {
-                                    prefs.lastSmsReceivedTimestamp = System.currentTimeMillis()
+                                    val now = System.currentTimeMillis()
+                                    prefs.lastSmsReceivedTimestamp = now
+                                    prefs.lastBalanceCheckTimestamp = now
                                 }
 
                                 saveMessage = if (it) "Eegidda Hadhaaga Tooska ah waa la shiday!" else "Eegidda Hadhaaga waa la damiyay!"
@@ -1359,7 +1361,9 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
 
                                     prefs.autoCheckBalanceEnabled = autoCheckEnabled
                                     if (autoCheckEnabled) {
-                                        prefs.lastSmsReceivedTimestamp = System.currentTimeMillis()
+                                        val now = System.currentTimeMillis()
+                                        prefs.lastSmsReceivedTimestamp = now
+                                        prefs.lastBalanceCheckTimestamp = now
                                     }
 
                                     prefs.checkBalanceIntervalMinutes = intervalMinutes
