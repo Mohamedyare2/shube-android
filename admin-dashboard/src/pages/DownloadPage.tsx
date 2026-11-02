@@ -65,14 +65,14 @@ export default function DownloadPage() {
 
   const fallbackLatest: AppRelease = {
     id: 'local-latest',
-    version: '1.3.0',
-    version_code: 3,
-    release_notes: 'Shube Gateway v1.3.0 — Fixed issue with Doze mode and waking up the screen for USSD processing.',
+    version: '1.5.0',
+    version_code: 5,
+    release_notes: '[03:17AM 01/11/2026] Cilladaha la xaliyay: Telephony Isolation (xallinta TikTok/app-switching) iyo in reply-ga USSD si toos ah u galo marka mobilku lock yahay.',
     apk_url: '/downloads/shube-latest.apk',
-    file_size_bytes: 25961298, // ~25 MB
+    file_size_bytes: 25987613, // ~26 MB
     is_latest: true,
     force_update: false,
-    created_at: new Date().toISOString(),
+    created_at: '2026-11-01T00:17:00.000Z',
     created_by: null,
   }
 
