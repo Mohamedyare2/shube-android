@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeout
 data class UssdStep(
     val type: String,
     val ussdCodeTemplate: String? = null,
-    val timeoutMs: Long = 15_000,
+    val timeoutMs: Long = 30_000,
     val value: String? = null,
     val successPatterns: List<String>? = null,
     val failurePatterns: List<String>? = null
