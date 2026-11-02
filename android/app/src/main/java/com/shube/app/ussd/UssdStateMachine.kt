@@ -106,9 +106,11 @@ class UssdStateMachine(private val context: Context) {
                                 diagnosticReason = "CALL_PHONE permission not granted or call failed"
                             )
                         }
+                        kotlinx.coroutines.delay(500)
                     }
                     
                     "WAIT_RESPONSE" -> {
+                        UssdAccessibilityService.startWaitingForFinalResponse()
                         val event = waitForDialog(step.timeoutMs, transactionStartTime)
                         lastCapturedDialogText = event.text
                         lastCapturedTimestamp = event.timestamp
@@ -154,6 +156,7 @@ class UssdStateMachine(private val context: Context) {
                     }
                     
                     "READ_RESPONSE" -> {
+                        UssdAccessibilityService.startWaitingForFinalResponse()
                         // Wait for the final outcome dialog to appear after the last reply was sent
                         try {
                             val event = waitForDialog(step.timeoutMs, transactionStartTime)
