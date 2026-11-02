@@ -2,10 +2,14 @@ package com.shube.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.CoroutineScope
@@ -21,8 +25,9 @@ import kotlinx.coroutines.delay
  * packages. All other apps (TikTok, WhatsApp, Facebook, etc.) are completely ignored,
  * preventing accidental UI interactions outside of USSD dialogs.
  *
- * IMPORTANT: This requires the operator to manually enable the accessibility
- * service in Android Settings.
+ * LOCK-SCREEN RESILIENCE: Uses ACTION_FOCUS, ACTION_ACCESSIBILITY_FOCUS,
+ * Clipboard ACTION_PASTE, and robust window searching with android:id/input prioritization
+ * so replies are successfully entered even when the screen is locked.
  */
 data class UssdDialogEvent(
     val text: String,
@@ -83,71 +88,96 @@ class UssdAccessibilityService : AccessibilityService() {
         /**
          * Returns true ONLY for packages that are part of the telephony/dialer stack.
          * Everything else — TikTok, WhatsApp, YouTube, launchers, etc. — returns false.
-         *
-         * TikTok in East Africa uses package: com.ss.android.ugc.trill
-         * Blocking "tiktok" alone is NOT sufficient — must also block "trill" and "musically".
          */
         fun isTelephonyPackage(pkg: String?): Boolean {
-            if (pkg == null) return false
+            if (pkg.isNullOrBlank()) return false
             val p = pkg.lowercase()
+
+            // ── Explicit blacklist: social, media, launchers ─────────────────
+            val blockSubstrings = listOf(
+                "tiktok", "trill", "musically",
+                "whatsapp", "facebook", "instagram",
+                "youtube", "chrome", "browser",
+                "launcher", "home", "shube", "geesh",
+                "telegram", "snapchat", "twitter",
+                "spotify", "netflix", "tinder"
+            )
+            if (blockSubstrings.any { p.contains(it) }) return false
 
             // ── Exact allow: bare "android" system package ─────────────────────
             if (p == "android") return true
 
-            // ── Prefix/substring allow: telephony stack ─────────────────────────
-            val allowSubstrings = listOf("phone", "dialer", "telecom", "telephony", "incallui")
-            if (allowSubstrings.any { p.contains(it) }) {
-                // Still must not be a blocked package that happens to contain those substrings
-                val blockSubstrings = listOf(
-                    "tiktok", "trill", "musically",
-                    "whatsapp", "facebook", "instagram",
-                    "youtube", "chrome", "browser",
-                    "launcher", "home", "shube",
-                    "telegram", "snapchat", "twitter",
-                    "spotify", "netflix", "tinder"
-                )
-                if (blockSubstrings.none { p.contains(it) }) return true
-            }
-
-            return false
+            // ── Allow telephony stack ──────────────────────────────────────────
+            return p.contains("phone") ||
+                   p.contains("dialer") ||
+                   p.contains("telecom") ||
+                   p.contains("telephony") ||
+                   p.contains("incall")
         }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         val info = AccessibilityServiceInfo().apply {
-            // TYPE_WINDOW_STATE_CHANGED ONLY — removes TYPE_WINDOW_CONTENT_CHANGED
-            // which would fire on every TikTok video scroll / animation frame.
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            // FLAG_RETRIEVE_INTERACTIVE_WINDOWS: allows us to see USSD dialogs shown
-            // over the lock screen (keyguard).
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         serviceInfo = info
         isServiceActive = true
-        Log.d("UssdAccessibility", "Service connected — strict telephony-only mode enabled")
+        Log.d("UssdAccessibility", "Service connected — strict telephony-only & lock-screen resilient mode enabled")
     }
 
     /**
      * Searches ALL active windows for a USSD dialog root node.
-     * Falls back to this when [rootInActiveWindow] is null (e.g., screen is locked).
-     *
-     * TELEPHONY ISOLATION: Only considers windows from telephony packages.
+     * Prioritizes windows that contain the standard android:id/input view ID or USSD keywords,
+     * ensuring the real USSD input dialog is selected over background or keyguard windows.
      */
     private fun findUssdRootNode(): AccessibilityNodeInfo? {
         return try {
-            windows?.firstNotNullOfOrNull { window ->
-                val root = window.root ?: return@firstNotNullOfOrNull null
-                // STRICT CHECK: skip any window not from the telephony stack
-                if (!isTelephonyPackage(root.packageName?.toString())) {
-                    return@firstNotNullOfOrNull null
+            val windowList = windows ?: return null
+
+            // 1. First priority: search for telephony window containing the input field
+            for (w in windowList) {
+                val root = w.root ?: continue
+                val rootPkg = root.packageName?.toString() ?: ""
+                if (!isTelephonyPackage(rootPkg)) continue
+
+                val editTexts = root.findAccessibilityNodeInfosByViewId("android:id/input")
+                if (editTexts.isNotEmpty()) {
+                    return root
                 }
-                val text = extractTextFromNode(root)
-                if (text.isNotBlank()) root else null
             }
+
+            // 2. Second priority: search for telephony window containing USSD keywords
+            for (w in windowList) {
+                val root = w.root ?: continue
+                val rootPkg = root.packageName?.toString() ?: ""
+                if (!isTelephonyPackage(rootPkg)) continue
+
+                val text = extractTextFromNode(root).lowercase()
+                if (text.contains("somtel") || text.contains("shube") || text.contains("geli") ||
+                    text.contains("pin") || text.contains("haragaaga") || text.contains("hadhaaga") ||
+                    text.contains("dhigo") || text.contains("number") || text.contains("mmi") ||
+                    text.contains("ussd")) {
+                    return root
+                }
+            }
+
+            // 3. Fallback: any telephony window with non-blank text
+            for (w in windowList) {
+                val root = w.root ?: continue
+                val rootPkg = root.packageName?.toString() ?: ""
+                if (!isTelephonyPackage(rootPkg)) continue
+
+                val text = extractTextFromNode(root)
+                if (text.isNotBlank()) {
+                    return root
+                }
+            }
+            null
         } catch (e: Exception) {
             Log.w("UssdAccessibility", "findUssdRootNode failed: ${e.message}")
             null
@@ -187,7 +217,6 @@ class UssdAccessibilityService : AccessibilityService() {
             val dialogText = extractTextFromNode(rootNode)
 
             // Ignore system loading dialogs (e.g., "USSD code running...", "MMI code started")
-            // If we process these, the state machine will advance prematurely and skip replies!
             val lowerText = dialogText.lowercase()
             if (lowerText.contains("running") || lowerText.contains("mmi") || lowerText.contains("wait")) {
                 Log.d("UssdAccessibility", "Ignoring system loading dialog: $dialogText")
@@ -271,6 +300,10 @@ class UssdAccessibilityService : AccessibilityService() {
         return sb.toString()
     }
 
+    /**
+     * Fills the reply into the USSD dialog using lock-screen resilient actions:
+     * Focus -> Clipboard PASTE -> SET_TEXT fallback -> Send button click.
+     */
     private suspend fun fillAndSubmitDialog(node: AccessibilityNodeInfo, text: String): Boolean {
         // TELEPHONY ISOLATION: verify this node belongs to the telephony stack
         if (!isTelephonyPackage(node.packageName?.toString())) {
@@ -282,19 +315,41 @@ class UssdAccessibilityService : AccessibilityService() {
         val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input") // Common ID
         val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(node)
 
-        if (targetEdit != null) {
+        if (targetEdit == null) {
+            Log.e("UssdAccessibility", "No EditText found in USSD dialog — cannot enter reply")
+            return false
+        }
+
+        // 1. Focus the EditText (essential on Lock Screen / Keyguard)
+        targetEdit.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        targetEdit.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        delay(200)
+
+        // 2. Clipboard PASTE (bypasses Android lock screen SET_TEXT restrictions)
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+            delay(150)
+            targetEdit.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+            delay(200)
+        } catch (e: Exception) {
+            Log.w("UssdAccessibility", "Clipboard paste failed, trying SET_TEXT fallback: ${e.message}")
+        }
+
+        // 3. Fallback to ACTION_SET_TEXT if paste did not populate the field
+        val currentText = targetEdit.text?.toString() ?: ""
+        if (currentText.isBlank()) {
             val arguments = android.os.Bundle().apply {
                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
             targetEdit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
-            // Wait slightly after writing the text before clicking send
-            delay(500)
-
-            // Find Send/OK button
-            return clickButton(node, listOf("SEND", "OK", "REPLY"))
+            delay(200)
         }
-        return false
+
+        // 4. Find and click Send / OK button
+        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa"))
+        Log.d("UssdAccessibility", "Reply submit (lock-screen resilient) result: $sent for '$text'")
+        return sent
     }
 
     private fun findEditTextFallback(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
@@ -314,6 +369,10 @@ class UssdAccessibilityService : AccessibilityService() {
             for (button in buttons) {
                 if (button.isClickable) {
                     button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    return true
+                }
+                if (button.parent?.isClickable == true) {
+                    button.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     return true
                 }
             }
