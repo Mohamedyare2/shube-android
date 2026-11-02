@@ -6,30 +6,33 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.shube.app.local.DevicePreferences
+import com.shube.app.local.PinManager
 import com.shube.app.supabase.SupabaseRepository
 import com.shube.app.supabase.TransactionInsert
+import com.shube.app.ussd.SomaliUssdResponseAnalyzer
 import com.shube.app.ussd.UssdResult
-import com.shube.app.ussd.UssdStateMachine
-import com.shube.app.ussd.UssdStep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 class GatewayForegroundService : Service() {
 
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
     
-    // Mutex to ensure USSD transactions are processed sequentially
+    // Mutex to ensure USSD transactions are processed sequentially (FIFO queue)
     private val ussdMutex = Mutex()
 
     companion object {
@@ -39,6 +42,7 @@ class GatewayForegroundService : Service() {
 
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "shube_gateway_channel"
+        private const val USSD_DIALOG_TIMEOUT_MS = 45_000L
     }
 
     private var heartbeatJob: kotlinx.coroutines.Job? = null
@@ -132,7 +136,7 @@ class GatewayForegroundService : Service() {
 
         Log.d("GatewayService", "Processing: amount=$amount SLS, sender=$sender")
 
-        // ── Acquire WakeLock so CPU never sleeps during USSD/transaction ──────
+        // ── Acquire WakeLock so CPU and screen stay awake during USSD/transaction ──────
         val powerManager = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         @Suppress("DEPRECATION")
         val wakeLock = powerManager?.newWakeLock(
@@ -145,88 +149,122 @@ class GatewayForegroundService : Service() {
 
         try {
             // ── Step 1: Check if sender is a registered customer ─────
-        notify("Looking Up Customer", "Checking if $sender is registered...")
-        val customer = SupabaseRepository.getCustomerBySender(sender)
-        val somtelNumber = customer?.somtelNumber
-        if (somtelNumber == null) {
-            Log.w("GatewayService", "Unregistered sender $sender. Ignoring SMS.")
-            return // Completely ignore, no transaction created
-        }
+            notify("Looking Up Customer", "Checking if $sender is registered...")
+            val customer = SupabaseRepository.getCustomerBySender(sender)
+            val somtelNumber = customer?.somtelNumber
+            if (somtelNumber == null) {
+                Log.w("GatewayService", "Unregistered sender $sender. Ignoring SMS.")
+                return // Completely ignore, no transaction created
+            }
 
-        // ── Step 2: Find bundle rule matching the amount ─────────
-        notify("Matching Bundle", "Looking up $amount SLS bundle rule...")
-        val bundle = SupabaseRepository.getBundleByAmount(amount, profileId)
-        if (bundle == null) {
-            Log.w("GatewayService", "Amount $amount SLS does not match any bundle rule. Assuming it's a normal transfer. Ignoring.")
-            // Completely ignore, no transaction created for non-bundle payments
-            return
-        }
-        Log.d("GatewayService", "Bundle matched: ${bundle.bundleName}")
+            // ── Step 2: Find bundle rule matching the amount ─────────
+            notify("Matching Bundle", "Looking up $amount SLS bundle rule...")
+            val bundle = SupabaseRepository.getBundleByAmount(amount, profileId)
+            if (bundle == null) {
+                Log.w("GatewayService", "Amount $amount SLS does not match any bundle rule. Assuming it's a normal transfer. Ignoring.")
+                return
+            }
+            Log.d("GatewayService", "Bundle matched: ${bundle.bundleName}")
 
-        // ── Step 3: Create transaction row (status = processing) ─
-        notify("Starting USSD", "Dialing ${bundle.ussdCode.take(8)}...")
-        val transactionId = SupabaseRepository.createTransaction(
-            TransactionInsert(
-                operatorId   = operatorId,
-                deviceId     = deviceId,
-                telesomNumber = sender,          // FIXED: was senderNumber
-                somtelNumber = somtelNumber,
-                amountSls    = amount,
-                bundleRuleId = bundle.id,        // FIXED: was bundleName (wrong column, now UUID FK)
-                smsHash      = hash,
-                smsBody      = smsBody,
-                testMode     = testMode,         // ADDED: track test transactions
-                status       = "processing"      // FIXED: lowercase to match DB CHECK constraint
+            // ── Step 3: Create transaction row (status = processing) ─
+            notify("Starting USSD", "Dialing ${bundle.ussdCode.take(8)}...")
+            val transactionId = SupabaseRepository.createTransaction(
+                TransactionInsert(
+                    operatorId   = operatorId,
+                    deviceId     = deviceId,
+                    telesomNumber = sender,
+                    somtelNumber = somtelNumber,
+                    amountSls    = amount,
+                    bundleRuleId = bundle.id,
+                    smsHash      = hash,
+                    smsBody      = smsBody,
+                    testMode     = testMode,
+                    status       = "processing"
+                )
             )
-        )
 
-        if (transactionId == null) {
-            Log.e("GatewayService", "Failed to create transaction row — aborting USSD to avoid double-charging")
-            return
-        }
+            if (transactionId == null) {
+                Log.e("GatewayService", "Failed to create transaction row — aborting USSD to avoid double-charging")
+                return
+            }
 
-        // ── Step 4: Build USSD steps from the bundle rule ────────
-        val steps = buildUssdSteps(bundle)
+            // ── Step 4: Prepare USSD code and sequential replies ─────
+            val pin = PinManager.getInstance(this).getPin() ?: "00000"
+            val codeToDial = bundle.ussdCode
+                .replace("{bundle_option}", bundle.ussdOption)
+                .replace("{somtel_number}", somtelNumber)
+                .replace("{pin}", pin)
 
-        // ── Step 5: Execute USSD workflow ─────────────────────────
-        val txStartTime = System.currentTimeMillis()
-        val ussdMachine = UssdStateMachine(this)
-        val outcome = ussdMachine.executeWorkflow(
-            steps                = steps,
-            somtelNumber         = somtelNumber ?: "",
-            bundleOption         = bundle.ussdOption,
-            transactionStartTime = txStartTime
-        )
+            val replies = bundle.ussdReplies.map { reply ->
+                reply
+                    .replace("{bundle_option}", bundle.ussdOption)
+                    .replace("{somtel_number}", somtelNumber)
+                    .replace("{numberka}", somtelNumber)
+                    .replace("{number}", somtelNumber)
+                    .replace("{pin}", pin)
+            }
 
-        Log.d("GatewayService", "USSD outcome: ${outcome.result}, reason='${outcome.diagnosticReason}', response='${outcome.rawResponseText}' for transaction $transactionId")
+            Log.d("GatewayService", "Executing USSD: $codeToDial with replies: $replies for transaction $transactionId")
+            notify("Starting USSD", "Dialing ${codeToDial.take(15)}...")
 
-        // ── Step 6: Update transaction status ─────────────────────
-        // Status MUST be lowercase to match the DB CHECK constraint
-        val (status, failureReason) = when (outcome.result) {
-            UssdResult.SUCCESS              -> Pair("success", null)
-            UssdResult.FAILED               -> Pair("failed", outcome.diagnosticReason)
-            UssdResult.UNKNOWN              -> Pair("unknown_result", outcome.diagnosticReason)
-            UssdResult.INTERACTION_REQUIRED -> Pair("ussd_interaction_required", outcome.diagnosticReason)
-        }
+            // ── Step 5: Execute USSD Session ──────────────────────────
+            // Start active session in Accessibility service with expected replies
+            UssdAccessibilityService.startSession(replies)
 
-        SupabaseRepository.updateTransactionStatus(
-            transactionId = transactionId,
-            status = status,
-            notes = failureReason,
-            resultText = outcome.rawResponseText,
-            completedAt = java.time.Instant.now().toString()
-        )
+            // Dial the USSD code
+            val dialed = dialUssd(codeToDial)
+            if (!dialed) {
+                UssdAccessibilityService.stopSession()
+                SupabaseRepository.updateTransactionStatus(
+                    transactionId = transactionId,
+                    status = "failed",
+                    notes = "CALL_PHONE permission not granted or call failed",
+                    resultText = null,
+                    completedAt = java.time.Instant.now().toString()
+                )
+                notify("❌ Bundle Failed", "Call permission not granted")
+                return
+            }
 
-        // Update notification with final status
-        val icon = when (outcome.result) {
-            UssdResult.SUCCESS -> "✅"
-            else               -> "❌"
-        }
-        notify("$icon Bundle ${if (outcome.result == UssdResult.SUCCESS) "Sent" else "Failed"}", "${bundle.bundleName} for $sender — $status")
+            // Wait for final response dialog (up to 45 seconds)
+            val event = withTimeoutOrNull(USSD_DIALOG_TIMEOUT_MS) {
+                UssdAccessibilityService.ussdDialogFlow.first()
+            }
 
-        // Return to standby after 5 seconds
-        kotlinx.coroutines.delay(5_000)
-        notify("Gateway Active", "Listening for payments...")
+            // Always stop session so accessibility service returns to dormant state
+            UssdAccessibilityService.stopSession()
+
+            val rawResponseText = event?.text
+            Log.d("GatewayService", "USSD Raw Response: '$rawResponseText' for transaction $transactionId")
+
+            // ── Step 6: Analyze response and update transaction status ─
+            val analysis = SomaliUssdResponseAnalyzer.analyze(rawResponseText)
+            val (status, failureReason) = when (analysis.status) {
+                UssdResult.SUCCESS              -> Pair("success", null)
+                UssdResult.FAILED               -> Pair("failed", analysis.diagnosticReason)
+                UssdResult.UNKNOWN              -> {
+                    if (rawResponseText == null) Pair("failed", "Timeout: no USSD response dialog received within 45s")
+                    else Pair("unknown_result", analysis.diagnosticReason)
+                }
+                UssdResult.INTERACTION_REQUIRED -> Pair("ussd_interaction_required", analysis.diagnosticReason)
+            }
+
+            SupabaseRepository.updateTransactionStatus(
+                transactionId = transactionId,
+                status = status,
+                notes = failureReason,
+                resultText = rawResponseText,
+                completedAt = java.time.Instant.now().toString()
+            )
+
+            // Update notification with final status
+            val icon = if (status == "success") "✅" else "❌"
+            notify("$icon Bundle ${if (status == "success") "Sent" else "Failed"}", "${bundle.bundleName} for $sender — $status")
+
+            // Return to standby after 3 seconds
+            delay(3_000)
+            notify("Gateway Active", "Listening for payments...")
+
         } finally {
             if (wakeLock?.isHeld == true) {
                 try { wakeLock.release() } catch (_: Exception) {}
@@ -234,52 +272,25 @@ class GatewayForegroundService : Service() {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // HELPERS
-    // ─────────────────────────────────────────────────────────────
-
-    /**
-     * Converts a BundleRule into the ordered list of UssdStep objects
-     * that the UssdStateMachine will execute.
-     *
-     * The rule has:
-     *   - ussdCode   e.g. "*137*{somtel_number}*{bundle_option}*{pin}#"
-     *   - ussdReplies e.g. ["1", "3", "1"]  — press after each USSD menu
-     */
-    private fun buildUssdSteps(bundle: com.shube.app.supabase.BundleRule): List<UssdStep> {
-        val steps = mutableListOf<UssdStep>()
-
-        // Step 1: Always DIAL the USSD code
-        steps.add(
-            UssdStep(
-                type              = "DIAL",
-                ussdCodeTemplate  = bundle.ussdCode,
-                timeoutMs         = 30_000
-            )
-        )
-
-        // Step 2+: Add each follow-up reply
-        bundle.ussdReplies.forEach { reply ->
-            steps.add(
-                UssdStep(
-                    type      = "SEND_REPLY",
-                    value     = reply,
-                    timeoutMs = 30_000
-                )
-            )
+    private fun dialUssd(code: String): Boolean {
+        return try {
+            if (checkSelfPermission(android.Manifest.permission.CALL_PHONE) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                Log.e("GatewayService", "CALL_PHONE permission not granted!")
+                return false
+            }
+            val encoded = Uri.encode(code)
+            val intent = Intent(Intent.ACTION_CALL).apply {
+                data = Uri.parse("tel:$encoded")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+            Log.d("GatewayService", "Dialed USSD via ACTION_CALL: $code")
+            true
+        } catch (e: Exception) {
+            Log.e("GatewayService", "Exception in dialUssd", e)
+            false
         }
-
-        // Final step: Read the response for result matching
-        steps.add(
-            UssdStep(
-                type            = "READ_RESPONSE",
-                timeoutMs       = 30_000,
-                successPatterns = listOf("success", "imtixaan", "la diray", "sent", "activated"),
-                failurePatterns = listOf("failed", "error", "khalad", "xasilan", "insufficient")
-            )
-        )
-
-        return steps
     }
 
     private fun notify(title: String, text: String) {
@@ -314,4 +325,3 @@ class GatewayForegroundService : Service() {
         manager.createNotificationChannel(channel)
     }
 }
-
