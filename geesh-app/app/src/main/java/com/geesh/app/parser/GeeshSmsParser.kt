@@ -49,7 +49,27 @@ class GeeshSmsParser {
         Pattern.CASE_INSENSITIVE
     )
 
+    /**
+     * Checks if the SMS is strictly an "ADEEGA SARIFKA" transaction message.
+     * Rejects regular "ZAAD DOLLAR" messages or non-Sarifka messages.
+     */
+    fun isAdeegaSarifka(body: String): Boolean {
+        val upper = body.uppercase()
+        val hasSarifka = upper.contains("ADEEGA SARIFKA") || upper.contains("ADEEGA SARRIFKA") || upper.contains("SARIFKA")
+        // If it explicitly says ZAAD DOLLAR without SARIFKA, it is regular ZAAD, not an exchange
+        if (upper.contains("ZAAD DOLLAR") && !hasSarifka) {
+            return false
+        }
+        return hasSarifka
+    }
+
     fun parse(body: String): ParsedGeeshSms? {
+        // Enforce ADEEGA SARIFKA check — reject ZAAD DOLLAR and non-Sarifka SMS
+        if (!isAdeegaSarifka(body)) {
+            Log.d("GeeshParser", "SMS ignored: Not an ADEEGA SARIFKA transaction")
+            return null
+        }
+
         // 1. Get the sent amount (the first $ match)
         val amountMatcher = amountPattern.matcher(body)
         if (!amountMatcher.find()) {
