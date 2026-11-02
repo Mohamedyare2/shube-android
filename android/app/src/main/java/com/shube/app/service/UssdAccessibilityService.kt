@@ -25,9 +25,12 @@ import kotlinx.coroutines.delay
  * packages. All other apps (TikTok, WhatsApp, Facebook, etc.) are completely ignored,
  * preventing accidental UI interactions outside of USSD dialogs.
  *
- * LOCK-SCREEN RESILIENCE: Uses ACTION_FOCUS, ACTION_ACCESSIBILITY_FOCUS,
- * Clipboard ACTION_PASTE, and robust window searching with android:id/input prioritization
- * so replies are successfully entered even when the screen is locked.
+ * LOCK-SCREEN RESILIENCE:
+ * 1. Active direct poller starts immediately when nextReply is assigned — continuously
+ *    checking interactive windows every 250ms without waiting for OS window events.
+ * 2. Focuses EditText (ACTION_FOCUS & ACTION_ACCESSIBILITY_FOCUS) to activate the field.
+ * 3. Uses ClipboardManager ACTION_PASTE with ACTION_SET_TEXT fallback, bypassing lockscreen restrictions.
+ * 4. Prioritizes telephony windows with android:id/input view ID over background windows.
  */
 data class UssdDialogEvent(
     val text: String,
@@ -37,15 +40,26 @@ data class UssdDialogEvent(
 class UssdAccessibilityService : AccessibilityService() {
 
     companion object {
+        @Volatile
+        var instance: UssdAccessibilityService? = null
+            private set
+
         // Shared flow to emit parsed USSD dialog events back to the State Machine
         private val _ussdDialogFlow = MutableSharedFlow<UssdDialogEvent>(extraBufferCapacity = 10)
         val ussdDialogFlow = _ussdDialogFlow.asSharedFlow()
 
         // Command channel to tell this service what to reply (if applicable)
-        // Set by UssdStateMachine before dialing/between steps; cleared after use.
+        // Setting nextReply immediately triggers active lock-screen polling.
+        @Volatile
         var nextReply: String? = null
+            set(value) {
+                field = value
+                if (value != null && isUssdSessionActive) {
+                    instance?.triggerActivePolling(value)
+                }
+            }
 
-        // Lock to prevent multiple accessibility events for the same dialog from triggering duplicate actions
+        // Lock to prevent multiple accessibility events or poller collisions for the same dialog
         @Volatile
         var isProcessingDialog = false
 
@@ -66,7 +80,7 @@ class UssdAccessibilityService : AccessibilityService() {
         fun startSession() {
             isUssdSessionActive = true
             isProcessingDialog = false
-            Log.d("UssdAccessibility", "USSD session STARTED — telephony isolation active")
+            Log.d("UssdAccessibility", "USSD session STARTED — telephony isolation & lockscreen poller active")
         }
 
         /**
@@ -118,8 +132,9 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         val info = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
@@ -131,9 +146,61 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Active background poller that queries interactive windows directly every 250ms.
+     * This bypasses Android lock-screen event drops when "USSD running" changes to the input dialog.
+     */
+    fun triggerActivePolling(expectedReply: String) {
+        if (!isUssdSessionActive) return
+        Log.d("UssdAccessibility", "Starting active lock-screen poller for reply: $expectedReply")
+
+        CoroutineScope(Dispatchers.Main).launch {
+            var attempts = 0
+            // Poll every 250ms for up to 30s (120 attempts)
+            while (attempts < 120 && isUssdSessionActive && nextReply == expectedReply) {
+                delay(250)
+                attempts++
+
+                if (isProcessingDialog) continue
+
+                val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                    ?: findUssdRootNode()) ?: continue
+
+                val dialogText = extractTextFromNode(rootNode)
+                val lower = dialogText.lowercase()
+
+                // Skip loading/progress dialogs ("running", "mmi", "wait", etc.)
+                if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
+                    continue
+                }
+
+                if (dialogText.isBlank()) continue
+
+                // Check for EditText
+                val editTexts = rootNode.findAccessibilityNodeInfosByViewId("android:id/input")
+                val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(rootNode)
+
+                if (targetEdit != null) {
+                    if (nextReply != expectedReply) break
+                    isProcessingDialog = true
+                    nextReply = null
+
+                    Log.d("UssdAccessibility", "Active Poller found EditText after ${attempts * 250}ms. Submitting: $expectedReply")
+                    val success = fillAndSubmitDialog(rootNode, expectedReply)
+                    Log.d("UssdAccessibility", "Active Poller submit result: $success")
+
+                    _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
+
+                    delay(500)
+                    isProcessingDialog = false
+                    break
+                }
+            }
+        }
+    }
+
+    /**
      * Searches ALL active windows for a USSD dialog root node.
-     * Prioritizes windows that contain the standard android:id/input view ID or USSD keywords,
-     * ensuring the real USSD input dialog is selected over background or keyguard windows.
+     * Prioritizes windows that contain the standard android:id/input view ID or USSD keywords.
      */
     private fun findUssdRootNode(): AccessibilityNodeInfo? {
         return try {
@@ -190,23 +257,25 @@ class UssdAccessibilityService : AccessibilityService() {
         // ── GATE 1: Session guard — ignore everything when no USSD is in progress ──
         if (!isUssdSessionActive) return
 
-        // ── GATE 2: Package guard — ignore any non-telephony app ──────────────
+        // ── GATE 2: Package guard ─────────────────────────────────────────────
         val eventPkg = event.packageName?.toString()
-        if (!isTelephonyPackage(eventPkg)) {
-            Log.v("UssdAccessibility", "Ignored event from non-telephony package: $eventPkg")
+        val isTelephony = isTelephonyPackage(eventPkg)
+        val isKeyguardOrSystem = eventPkg?.contains("systemui", ignoreCase = true) == true ||
+                                 eventPkg?.contains("keyguard", ignoreCase = true) == true
+
+        // If not telephony and not lockscreen container, ignore completely
+        if (!isTelephony && !isKeyguardOrSystem) {
             return
         }
 
-        // We are looking for dialogs, typically from the phone app or system UI
-        val className = event.className?.toString() ?: return
-
+        val className = event.className?.toString() ?: ""
         val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
                             className.contains("AlertDialog", ignoreCase = true) ||
                             className.contains("Ussd", ignoreCase = true) ||
                             className.contains("Phone", ignoreCase = true) ||
-                            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
 
-        // Common USSD dialog class names (varies heavily by OEM)
         if (isDialogEvent) {
             if (isProcessingDialog) return // Ignore redundant events while we process
 
@@ -218,7 +287,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
             // Ignore system loading dialogs (e.g., "USSD code running...", "MMI code started")
             val lowerText = dialogText.lowercase()
-            if (lowerText.contains("running") || lowerText.contains("mmi") || lowerText.contains("wait")) {
+            if (lowerText.contains("running") || lowerText.contains("mmi") || lowerText.contains("wait") || lowerText.contains("fadlan sug")) {
                 Log.d("UssdAccessibility", "Ignoring system loading dialog: $dialogText")
                 return
             }
@@ -233,13 +302,11 @@ class UssdAccessibilityService : AccessibilityService() {
                     isProcessingDialog = true
 
                     CoroutineScope(Dispatchers.Main).launch {
-                        Log.d("UssdAccessibility", "Polling for EditText (up to 15s)...")
-                        // Active polling loop up to 15 seconds (every 250ms, 60 attempts)
+                        Log.d("UssdAccessibility", "Polling for EditText (up to 30s)...")
                         var targetNode: AccessibilityNodeInfo? = null
                         var attempts = 0
-                        while (attempts < 60) {
+                        while (attempts < 120 && isUssdSessionActive) {
                             delay(250)
-                            // When locked, rootInActiveWindow may be null — fall back to telephony windows
                             val freshNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
                                 ?: findUssdRootNode())
                             if (freshNode != null) {
@@ -260,13 +327,12 @@ class UssdAccessibilityService : AccessibilityService() {
                             val freshNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
                                 ?: findUssdRootNode()) ?: rootNode
                             val success = fillAndSubmitDialog(freshNode, reply)
-                            Log.w("UssdAccessibility", "Fallback submit reply success: $success after 15s timeout")
+                            Log.w("UssdAccessibility", "Fallback submit reply success: $success after timeout")
                         }
 
                         // Emit to state machine AFTER we finish so it doesn't advance prematurely
                         _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
 
-                        // Small delay before releasing lock to prevent immediate re-trigger by closing animation
                         delay(500)
                         isProcessingDialog = false
                     }
@@ -401,6 +467,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         stopSession()
+        if (instance == this) instance = null
         isServiceActive = false
         Log.d("UssdAccessibility", "Service unbound")
         super.onDestroy()
