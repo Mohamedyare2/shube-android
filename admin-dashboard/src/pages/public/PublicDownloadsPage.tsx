@@ -13,6 +13,11 @@ interface AppDownload {
   fileSize: string
   btnClass: string
   requirements: string
+  updateNotice?: {
+    badge: string
+    time: string
+    description: string
+  }
 }
 
 const apps: AppDownload[] = [
@@ -21,19 +26,25 @@ const apps: AppDownload[] = [
     icon: 'S',
     iconClass: 'pub-app-icon--blue',
     name: 'Shube App',
-    version: 'Latest',
+    version: '1.5.0',
     subtitle: 'Mobile Money Gateway',
+    updateNotice: {
+      badge: 'UPDATE CUSUB',
+      time: '03:17AM 01/11/2026',
+      description: 'Telephony Isolation (xallinta cilladdii TikTok/app-switching) iyo xallinta in reply-ga USSD si toos ah u galo marka shaashaddu xidhan tahay (Lock Screen).',
+    },
     description:
       'Shube is the gateway application that sits on an Android device and automatically processes incoming payment SMS messages. It dials USSD codes, completes transactions, and syncs all activity to the Shube web dashboard in real time.',
     features: [
       'Auto SMS detection from Hormuud & Somtel',
-      'Automatic USSD execution',
+      'Automatic USSD execution (Lock Screen supported)',
+      'Telephony Isolation (Zero background interference)',
       'Real-time transaction sync',
       'Multi-operator support',
       'Web dashboard management',
     ],
     apkUrl: '/downloads/shube-latest.apk',
-    fileSize: '~24.8 MB',
+    fileSize: '~26.0 MB',
     btnClass: 'pub-btn-primary',
     requirements: 'Android 7.0 (Nougat) or higher',
   },
@@ -54,7 +65,7 @@ const apps: AppDownload[] = [
       'Works offline after setup',
     ],
     apkUrl: '/downloads/geesh-latest.apk',
-    fileSize: '~21.6 MB',
+    fileSize: '~22.8 MB',
     btnClass: 'pub-btn-purple',
     requirements: 'Android 8.0 (Oreo) or higher — Accessibility Service required',
   },
@@ -160,6 +171,40 @@ export default function PublicDownloadsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* ── Update Notification Banner (on top of Shube App) ── */}
+                {app.updateNotice && (
+                  <div style={{
+                    background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.16) 0%, rgba(30, 58, 138, 0.22) 100%)',
+                    border: '1.5px solid rgba(96, 165, 250, 0.45)',
+                    borderRadius: '12px',
+                    padding: '12px 14px',
+                    marginTop: '14px',
+                    marginBottom: '14px',
+                    boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <span style={{
+                        background: '#2563EB',
+                        color: '#FFFFFF',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        letterSpacing: '0.5px'
+                      }}>
+                        ⚡ {app.updateNotice.badge}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', color: '#93C5FD', fontWeight: 700, fontFamily: 'monospace' }}>
+                        🕒 {app.updateNotice.time}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.84rem', color: '#F1F5F9', lineHeight: 1.5 }}>
+                      <span style={{ color: '#60A5FA', fontWeight: 700 }}>Cilladda la xaliyay: </span>
+                      {app.updateNotice.description}
+                    </div>
+                  </div>
+                )}
 
                 <p className="pub-download-card-desc">{app.description}</p>
 

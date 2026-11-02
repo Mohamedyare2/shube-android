@@ -2,23 +2,29 @@ package com.shube.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import java.util.Collections
 
 /**
- * Fallback USSD automation service for devices that do not fully support 
- * multi-step interaction via TelephonyManager.sendUssdRequest().
- * 
- * IMPORTANT: This requires the operator to manually enable the accessibility 
- * service in Android Settings.
+ * Robust USSD automation service for Somtel / Hormuud / Telesom transactions.
+ * Matches the proven, battle-tested architecture of Geesh App:
+ *  - Sequential replyQueue loaded before dialing.
+ *  - Works seamlessly while phone is locked (Lock Screen / Keyguard active).
+ *  - Strict Telephony Isolation: NEVER touches user apps (TikTok, WhatsApp, etc.).
+ *  - Continuous Active Poller (250ms) ensures prompt response even if OS throttles lock-screen events.
+ *  - Emits final dialog text to ussdDialogFlow only after all replies have been submitted.
  */
 data class UssdDialogEvent(
     val text: String,
@@ -28,230 +34,399 @@ data class UssdDialogEvent(
 class UssdAccessibilityService : AccessibilityService() {
 
     companion object {
-        // Shared flow to emit parsed USSD dialog events back to the State Machine
-        private val _ussdDialogFlow = MutableSharedFlow<UssdDialogEvent>(extraBufferCapacity = 10)
+        @Volatile
+        var instance: UssdAccessibilityService? = null
+            private set
+
+        // Flow to emit the final dialog text back to GatewayForegroundService
+        private val _ussdDialogFlow = MutableSharedFlow<UssdDialogEvent>(extraBufferCapacity = 5)
         val ussdDialogFlow = _ussdDialogFlow.asSharedFlow()
-        
-        // Command channel to tell this service what to reply (if applicable)
-        var nextReply: String? = null
-        
-        // Lock to prevent multiple accessibility events for the same dialog from triggering duplicate actions
+
+        // Queue of sequential replies for USSD dialogs
+        private val replyQueue = Collections.synchronizedList(mutableListOf<String>())
+
+        // Active USSD session flag. When FALSE, this service ignores ALL screen events completely.
+        @Volatile
+        var isUssdSessionActive = false
+            private set
+
+        // Guard against duplicate concurrent dialog processing
         @Volatile
         var isProcessingDialog = false
-        
+
         var isServiceActive = false
             private set
 
-        fun emitDialog(text: String) {
-            _ussdDialogFlow.tryEmit(UssdDialogEvent(text = text))
+        /**
+         * Starts an active USSD session with the given sequential replies.
+         */
+        fun startSession(replies: List<String> = emptyList()) {
+            synchronized(replyQueue) {
+                replyQueue.clear()
+                replyQueue.addAll(replies.filter { it.isNotBlank() })
+            }
+            isProcessingDialog = false
+            isUssdSessionActive = true
+            Log.d("UssdAccessibility", "USSD Session STARTED with ${replyQueue.size} replies: $replies")
+            instance?.startActivePoller()
+        }
+
+        /**
+         * Stops the USSD session and clears any remaining replies.
+         */
+        fun stopSession() {
+            synchronized(replyQueue) {
+                replyQueue.clear()
+            }
+            isProcessingDialog = false
+            isUssdSessionActive = false
+            Log.d("UssdAccessibility", "USSD Session STOPPED")
+        }
+
+        // Backward-compatible single reply accessor
+        var nextReply: String?
+            get() = synchronized(replyQueue) { replyQueue.firstOrNull() }
+            set(value) {
+                synchronized(replyQueue) {
+                    replyQueue.clear()
+                    if (!value.isNullOrBlank()) {
+                        replyQueue.add(value)
+                    }
+                }
+            }
+
+        fun startWaitingForFinalResponse() {
+            // No-op for compatibility; session automatically handles final response when replyQueue is empty
+        }
+
+        /**
+         * Verifies whether a package belongs to the telephony/dialer framework.
+         * Explicitly rejects any social, media, browser, or user applications.
+         */
+        fun isTelephonyPackage(packageName: String?): Boolean {
+            if (packageName.isNullOrBlank()) return false
+            val lower = packageName.lowercase()
+
+            // 1. Explicitly blacklist all non-telephony apps
+            if (lower.contains("tiktok") ||
+                lower.contains("trill") ||
+                lower.contains("musically") ||
+                lower.contains("whatsapp") ||
+                lower.contains("facebook") ||
+                lower.contains("instagram") ||
+                lower.contains("youtube") ||
+                lower.contains("chrome") ||
+                lower.contains("browser") ||
+                lower.contains("launcher") ||
+                lower.contains("home") ||
+                lower.contains("shube") ||
+                lower.contains("geesh") ||
+                lower.contains("telegram") ||
+                lower.contains("snapchat") ||
+                lower.contains("systemui") ||   // Ignore systemui so lockscreen notifications are not mistaken for USSD
+                lower.contains("keyguard")) {
+                return false
+            }
+
+            // 2. Allow telephony, dialer, telecom, and OS components
+            return lower.contains("phone") ||
+                   lower.contains("dialer") ||
+                   lower.contains("telecom") ||
+                   lower.contains("telephony") ||
+                   lower.contains("incall") ||
+                   lower.contains("caller") ||          // Infinix Hot 50i / Transsion standard dialer (com.sh.smart.caller)
+                   lower.contains("transsion") ||       // Transsion OS telecom components
+                   lower.contains("contacts") ||        // MTK / AOSP dialer
+                   lower.contains("stk") ||             // SIM Toolkit
+                   lower == "android"
         }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        val info = AccessibilityServiceInfo().apply {
+        instance = this
+        serviceInfo = AccessibilityServiceInfo().apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            // FLAG_RETRIEVE_INTERACTIVE_WINDOWS: allows us to see ALL windows including
-            // USSD dialogs shown over the lock screen (keyguard).
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                     AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+            notificationTimeout = 100
         }
-        serviceInfo = info
         isServiceActive = true
-        Log.d("UssdAccessibility", "Service connected (lock-screen mode enabled)")
+        Log.d("UssdAccessibility", "Accessibility service connected (Strict telephony-only mode)")
     }
 
     /**
-     * Searches ALL active windows (including over the keyguard/lock screen) for
-     * a USSD dialog root node. Falls back to this when [rootInActiveWindow] is null,
-     * which happens whenever the screen is locked.
+     * Active background poller that queries interactive windows directly every 250ms.
+     * Bypasses Android lock-screen event drops on Infinix Hot 50i and Samsung Galaxy.
      */
-    private fun findUssdRootNode(): AccessibilityNodeInfo? {
-        return try {
-            windows?.firstNotNullOfOrNull { window ->
-                val root = window.root ?: return@firstNotNullOfOrNull null
-                val text = extractTextFromNode(root)
-                // Accept any window that has visible text (likely a USSD dialog)
-                if (text.isNotBlank()) root else null
+    fun startActivePoller() {
+        CoroutineScope(Dispatchers.Main).launch {
+            var attempts = 0
+            while (attempts < 160 && isUssdSessionActive) { // Up to 40 seconds
+                delay(250)
+                attempts++
+
+                if (isProcessingDialog) continue
+
+                val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                    ?: findUssdRootNode()) ?: continue
+
+                val dialogText = extractText(rootNode)
+                if (dialogText.isBlank()) continue
+
+                val lower = dialogText.lowercase()
+                if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
+                    continue
+                }
+
+                processDialog(rootNode, dialogText)
             }
-        } catch (e: Exception) {
-            Log.w("UssdAccessibility", "findUssdRootNode failed: ${e.message}")
-            null
         }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        if (event == null || !isUssdSessionActive) return
 
-        // We are looking for dialogs, typically from the phone app or system UI
-        val className = event.className?.toString() ?: return
-        
+        val pkg = event.packageName?.toString() ?: ""
+        if (!isTelephonyPackage(pkg)) return
+
+        val className = event.className?.toString() ?: ""
         val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
                             className.contains("AlertDialog", ignoreCase = true) ||
                             className.contains("Ussd", ignoreCase = true) ||
                             className.contains("Phone", ignoreCase = true) ||
                             event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
 
-        // Common USSD dialog class names (varies heavily by OEM)
         if (isDialogEvent) {
-            if (isProcessingDialog) return // Ignore redundant events for the same dialog while we process it
+            if (isProcessingDialog) return
 
-            // Use rootInActiveWindow normally; fall back to searching all windows when locked.
-            val rootNode = rootInActiveWindow ?: findUssdRootNode() ?: return
-            
-            val dialogText = extractTextFromNode(rootNode)
-            
-            // Ignore system loading dialogs (e.g., "USSD code running...", "MMI code started")
-            // If we process these, the state machine will advance prematurely and skip replies!
-            val lowerText = dialogText.lowercase()
-            if (lowerText.contains("running") || lowerText.contains("mmi") || lowerText.contains("wait")) {
-                Log.d("UssdAccessibility", "Ignoring system loading dialog: $dialogText")
+            val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                ?: findUssdRootNode()) ?: return
+
+            val dialogText = extractText(rootNode)
+            val lower = dialogText.lowercase()
+
+            // Skip loading dialogs
+            if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
+                Log.d("UssdAccessibility", "Skipping loading dialog: $dialogText")
                 return
             }
 
-            if (dialogText.isNotBlank()) {
-                Log.d("UssdAccessibility", "Intercepted USSD Dialog: $dialogText")
-                
-                // If the state machine gave us a reply to enter:
-                if (nextReply != null) {
-                    val reply = nextReply!!
-                    nextReply = null
-                    isProcessingDialog = true
-                    
-                    CoroutineScope(Dispatchers.Main).launch {
-                        Log.d("UssdAccessibility", "Polling for EditText (up to 15s)...")
-                        // Active polling loop up to 15 seconds (every 250ms, 60 attempts) to ensure EditText is ready
-                        var targetNode: AccessibilityNodeInfo? = null
-                        var attempts = 0
-                        while (attempts < 60) {
-                            delay(250)
-                            // When locked, rootInActiveWindow may be null — fall back to all windows
-                            val freshNode = rootInActiveWindow ?: findUssdRootNode()
-                            if (freshNode != null) {
-                                val editTexts = freshNode.findAccessibilityNodeInfosByViewId("android:id/input")
-                                val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(freshNode)
-                                if (targetEdit != null) {
-                                    targetNode = freshNode
-                                    break
-                                }
-                            }
-                            attempts++
-                        }
+            if (dialogText.isBlank()) return
 
-                        if (targetNode != null) {
-                            val success = fillAndSubmitDialog(targetNode, reply)
-                            Log.d("UssdAccessibility", "Submit reply success: $success after ${attempts * 250}ms")
-                        } else {
-                            val freshNode = rootInActiveWindow ?: findUssdRootNode() ?: rootNode
-                            val success = fillAndSubmitDialog(freshNode, reply)
-                            Log.w("UssdAccessibility", "Fallback submit reply success: $success after 15s timeout")
+            processDialog(rootNode, dialogText)
+        }
+    }
+
+    /**
+     * Central dialog processor:
+     * - If replyQueue has items: fills and submits next reply.
+     * - If replyQueue is empty: treats dialog as the final result, clicks OK, and emits.
+     */
+    private fun processDialog(rootNode: AccessibilityNodeInfo, dialogText: String) {
+        val hasRepliesLeft = synchronized(replyQueue) { replyQueue.isNotEmpty() }
+
+        if (hasRepliesLeft) {
+            isProcessingDialog = true
+            val currentReply = synchronized(replyQueue) {
+                if (replyQueue.isNotEmpty()) replyQueue.removeAt(0) else null
+            } ?: run {
+                isProcessingDialog = false
+                return
+            }
+
+            Log.d("UssdAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
+
+            CoroutineScope(Dispatchers.Main).launch {
+                var targetNode: AccessibilityNodeInfo? = null
+                var attempts = 0
+                while (attempts < 40 && isUssdSessionActive) {
+                    delay(250)
+                    val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                        ?: findUssdRootNode()
+
+                    if (freshRoot != null && isTelephonyPackage(freshRoot.packageName?.toString())) {
+                        val edit = freshRoot.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+                            ?: findEditText(freshRoot)
+                        if (edit != null) {
+                            targetNode = freshRoot
+                            break
                         }
-                        
-                        // Emit to state machine AFTER we finish so it doesn't advance prematurely
-                        _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
-                        
-                        // Small delay before releasing lock to prevent immediate re-trigger by closing animation
-                        delay(500)
-                        isProcessingDialog = false
                     }
-                } else {
-                    isProcessingDialog = true
-                    
-                    // Just reading a final response, attempt to click OK/Dismiss
-                    clickButton(rootNode, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
-                    
-                    // Emit immediately since there is no reply
-                    _ussdDialogFlow.tryEmit(UssdDialogEvent(text = dialogText))
-                    
-                    CoroutineScope(Dispatchers.Main).launch {
-                        delay(500)
-                        isProcessingDialog = false
-                    }
+                    attempts++
                 }
+
+                if (targetNode != null && isTelephonyPackage(targetNode.packageName?.toString())) {
+                    Log.d("UssdAccessibility", "EditText ready. Submitting reply: $currentReply")
+                    val ok = fillAndSubmit(targetNode, currentReply)
+                    Log.d("UssdAccessibility", "Reply submission result: $ok")
+                } else {
+                    Log.w("UssdAccessibility", "No EditText found in telephony window after waiting 10s")
+                    val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                        ?: findUssdRootNode() ?: rootNode
+                    val text = extractText(freshRoot).ifBlank { dialogText }
+                    _ussdDialogFlow.tryEmit(UssdDialogEvent(text = text))
+                    clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
+                }
+
+                delay(200)
+                isProcessingDialog = false
+            }
+        } else {
+            isProcessingDialog = true
+            Log.d("UssdAccessibility", "Final USSD dialog detected: $dialogText")
+
+            CoroutineScope(Dispatchers.Main).launch {
+                val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                    ?: findUssdRootNode() ?: rootNode
+                val finalText = extractText(freshRoot).ifBlank { dialogText }
+
+                _ussdDialogFlow.tryEmit(UssdDialogEvent(text = finalText))
+                Log.d("UssdAccessibility", "Emitted final USSD result: $finalText")
+
+                delay(300)
+                clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH", "KA SAAR", "HAA"))
+
+                delay(300)
+                isProcessingDialog = false
             }
         }
     }
 
-    private fun extractTextFromNode(node: AccessibilityNodeInfo?): String {
+    /**
+     * Searches interactive windows strictly for telephony/dialer windows.
+     * Never inspects user apps or lockscreen notification shades.
+     */
+    private fun findUssdRootNode(): AccessibilityNodeInfo? {
+        val windowList = try { windows } catch (_: Exception) { emptyList<AccessibilityWindowInfo>() }
+        for (w in windowList) {
+            val root = w.root ?: continue
+            val rootPkg = root.packageName?.toString() ?: ""
+
+            // STRICT FILTER: If not a telephony package, SKIP completely!
+            if (!isTelephonyPackage(rootPkg)) {
+                continue
+            }
+
+            // 1. Check for standard Android USSD input view ID
+            val editTexts = root.findAccessibilityNodeInfosByViewId("android:id/input")
+            if (editTexts.isNotEmpty()) return root
+
+            // 2. Check for explicit telecom / USSD keywords
+            val text = extractText(root).lowercase()
+            if (text.contains("somtel") || text.contains("telesom") || text.contains("zaad") ||
+                text.contains("shub") || text.contains("geli") || text.contains("pin") ||
+                text.contains("hadhaag") || text.contains("haraag") || text.contains("dhigatay") ||
+                text.contains("dirtay") || text.contains("wareejisay") || text.contains("lacag") ||
+                text.contains("sahal") || text.contains("edahab") || text.contains("mmi") ||
+                text.contains("ussd")) {
+                return root
+            }
+        }
+        return null
+    }
+
+    private fun extractText(node: AccessibilityNodeInfo?): String {
         if (node == null) return ""
-        val sb = java.lang.StringBuilder()
-        if (node.text != null) {
-            sb.append(node.text).append("\n")
-        }
-        for (i in 0 until node.childCount) {
-            sb.append(extractTextFromNode(node.getChild(i)))
-        }
+        val sb = StringBuilder()
+        if (node.text != null) sb.append(node.text).append("\n")
+        for (i in 0 until node.childCount) sb.append(extractText(node.getChild(i)))
         return sb.toString()
     }
-    
-    private suspend fun fillAndSubmitDialog(node: AccessibilityNodeInfo, text: String): Boolean {
-        // Find EditText
-        val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input") // Common ID
-        val targetEdit = if (editTexts.isNotEmpty()) editTexts[0] else findEditTextFallback(node)
-        
-        if (targetEdit != null) {
-            val arguments = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            targetEdit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-            
-            // Wait slightly after writing the text before clicking send
-            delay(500)
-            
-            // Find Send/OK button
-            return clickButton(node, listOf("SEND", "OK", "REPLY"))
+
+    /**
+     * Enters [text] into the USSD reply dialog and presses Send.
+     * Uses direct ACTION_SET_TEXT primary + Clipboard PASTE fallback.
+     */
+    private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
+        val nodePkg = node.packageName?.toString() ?: ""
+        if (!isTelephonyPackage(nodePkg)) {
+            Log.w("UssdAccessibility", "Blocked fillAndSubmit on non-telephony package: $nodePkg")
+            return false
         }
-        return false
+
+        val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
+        val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
+
+        if (target == null) {
+            Log.e("UssdAccessibility", "No EditText found in USSD dialog — cannot enter reply")
+            return false
+        }
+
+        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+        target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        delay(150)
+
+        // 1. Direct ACTION_SET_TEXT
+        val bundle = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        delay(150)
+
+        // 2. Fallback to Clipboard PASTE if text was not populated
+        val currentText = target.text?.toString() ?: ""
+        if (!currentText.contains(text)) {
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+                delay(100)
+                target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                delay(150)
+            } catch (e: Exception) {
+                Log.w("UssdAccessibility", "Clipboard paste fallback error: ${e.message}")
+            }
+        }
+
+        // 3. Click Send / Positive button
+        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa", "GELI", "Geli"))
+        Log.d("UssdAccessibility", "Send button clicked: $sent for reply: $text")
+        return sent
     }
-    
-    private fun findEditTextFallback(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+
+    private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
         if (node.className?.toString()?.contains("EditText") == true) return node
         for (i in 0 until node.childCount) {
-            val res = findEditTextFallback(node.getChild(i))
-            if (res != null) return res
+            val r = findEditText(node.getChild(i))
+            if (r != null) return r
         }
         return null
     }
 
     private fun clickButton(node: AccessibilityNodeInfo, labels: List<String>): Boolean {
-        // Try standard Android button IDs first
-        val standardIds = listOf("android:id/button1", "com.android.phone:id/button1")
-        for (id in standardIds) {
-            val buttons = node.findAccessibilityNodeInfosByViewId(id)
-            for (button in buttons) {
-                if (button.isClickable) {
-                    button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return true
-                }
+        val standardBtnIds = listOf(
+            "android:id/button1",
+            "com.android.phone:id/button1",
+            "com.sh.smart.caller:id/button1",
+            "com.transsion.telephony:id/button1",
+            "com.transsion.smartcaller:id/button1"
+        )
+        for (id in standardBtnIds) {
+            val btns = node.findAccessibilityNodeInfosByViewId(id)
+            for (btn in btns) {
+                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
             }
         }
+
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
-            for (button in buttons) {
-                if (button.isClickable) {
-                    button.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return true
-                } else {
-                    // Sometimes the parent is the clickable element
-                    if (button.parent?.isClickable == true) {
-                        button.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                        return true
-                    }
-                }
+            for (btn in buttons) {
+                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
             }
         }
         return false
     }
 
-    override fun onInterrupt() {
-        Log.w("UssdAccessibility", "Service interrupted")
-    }
+    override fun onInterrupt() { Log.w("UssdAccessibility", "Service interrupted") }
 
     override fun onDestroy() {
+        stopSession()
+        if (instance == this) instance = null
         isServiceActive = false
-        Log.d("UssdAccessibility", "Service unbound")
         super.onDestroy()
     }
 }
