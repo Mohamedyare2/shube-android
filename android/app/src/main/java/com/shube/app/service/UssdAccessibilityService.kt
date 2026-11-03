@@ -23,7 +23,9 @@ import java.util.Collections
  *  - Sequential replyQueue loaded before dialing.
  *  - Works seamlessly while phone is locked (Lock Screen / Keyguard active).
  *  - Strict Telephony Isolation: NEVER touches user apps (TikTok, WhatsApp, etc.).
- *  - Continuous Active Poller (250ms) ensures prompt response even if OS throttles lock-screen events.
+ *  - Event-driven ONLY via onAccessibilityEvent (typeWindowStateChanged).
+ *  - NO active poller — Geesh App architecture proven to work on lock screen.
+ *  - Clipboard PASTE first (works on lock screen), SET_TEXT as fallback only.
  *  - Emits final dialog text to ussdDialogFlow only after all replies have been submitted.
  */
 data class UssdDialogEvent(
@@ -59,6 +61,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
         /**
          * Starts an active USSD session with the given sequential replies.
+         * NO active poller is started — event-driven only (Geesh App architecture).
          */
         fun startSession(replies: List<String> = emptyList()) {
             synchronized(replyQueue) {
@@ -68,7 +71,7 @@ class UssdAccessibilityService : AccessibilityService() {
             isProcessingDialog = false
             isUssdSessionActive = true
             Log.d("UssdAccessibility", "USSD Session STARTED with ${replyQueue.size} replies: $replies")
-            instance?.startActivePoller()
+            // NOTE: No startActivePoller() — purely event-driven like Geesh App
         }
 
         /**
@@ -146,7 +149,8 @@ class UssdAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            // ONLY typeWindowStateChanged — no typeWindowContentChanged (avoids lock-screen clock false triggers)
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
@@ -154,37 +158,13 @@ class UssdAccessibilityService : AccessibilityService() {
             notificationTimeout = 100
         }
         isServiceActive = true
-        Log.d("UssdAccessibility", "Accessibility service connected (Strict telephony-only mode)")
+        Log.d("UssdAccessibility", "Accessibility service connected (Event-driven, Clipboard-first, Geesh architecture)")
     }
 
-    /**
-     * Active background poller that queries interactive windows directly every 250ms.
-     * Bypasses Android lock-screen event drops on Infinix Hot 50i and Samsung Galaxy.
-     */
-    fun startActivePoller() {
-        CoroutineScope(Dispatchers.Main).launch {
-            var attempts = 0
-            while (attempts < 160 && isUssdSessionActive) { // Up to 40 seconds
-                delay(250)
-                attempts++
-
-                if (isProcessingDialog) continue
-
-                val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
-                    ?: findUssdRootNode()) ?: continue
-
-                val dialogText = extractText(rootNode)
-                if (dialogText.isBlank()) continue
-
-                val lower = dialogText.lowercase()
-                if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
-                    continue
-                }
-
-                processDialog(rootNode, dialogText)
-            }
-        }
-    }
+    // NOTE: startActivePoller() has been REMOVED entirely.
+    // Geesh App is proven to work on lock screen WITHOUT a poller.
+    // The poller was draining replyQueue BEFORE the USSD dialog appeared,
+    // causing the reply to be missing when the dialog finally showed up.
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || !isUssdSessionActive) return
@@ -192,32 +172,26 @@ class UssdAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: ""
         if (!isTelephonyPackage(pkg)) return
 
-        val className = event.className?.toString() ?: ""
-        val isDialogEvent = className.contains("Dialog", ignoreCase = true) ||
-                            className.contains("AlertDialog", ignoreCase = true) ||
-                            className.contains("Ussd", ignoreCase = true) ||
-                            className.contains("Phone", ignoreCase = true) ||
-                            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        // Only process TYPE_WINDOW_STATE_CHANGED (new dialog appeared)
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
-        if (isDialogEvent) {
-            if (isProcessingDialog) return
+        if (isProcessingDialog) return
 
-            val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
-                ?: findUssdRootNode()) ?: return
+        val rootNode = (rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+            ?: findUssdRootNode()) ?: return
 
-            val dialogText = extractText(rootNode)
-            val lower = dialogText.lowercase()
+        val dialogText = extractText(rootNode)
+        val lower = dialogText.lowercase()
 
-            // Skip loading dialogs
-            if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
-                Log.d("UssdAccessibility", "Skipping loading dialog: $dialogText")
-                return
-            }
-
-            if (dialogText.isBlank()) return
-
-            processDialog(rootNode, dialogText)
+        // Skip loading dialogs
+        if (lower.contains("running") || lower.contains("mmi") || lower.contains("wait") || lower.contains("fadlan sug")) {
+            Log.d("UssdAccessibility", "Skipping loading dialog: $dialogText")
+            return
         }
+
+        if (dialogText.isBlank()) return
+
+        processDialog(rootNode, dialogText)
     }
 
     /**
@@ -276,9 +250,8 @@ class UssdAccessibilityService : AccessibilityService() {
                     clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                 }
 
-                // Wait 1.5s before releasing the guard to prevent poller from re-triggering
-                // on the same dialog window (which would cause double-input like "1" → "11")
-                delay(1500)
+                // 200ms guard (same as Geesh App) — prevents same dialog from being processed twice
+                delay(200)
                 isProcessingDialog = false
             }
         } else {
@@ -345,7 +318,10 @@ class UssdAccessibilityService : AccessibilityService() {
 
     /**
      * Enters [text] into the USSD reply dialog and presses Send.
-     * Uses direct ACTION_SET_TEXT (the standard Android Accessibility API for text entry/replacement).
+     *
+     * GEESH ARCHITECTURE — Clipboard PASTE FIRST (works on lock screen).
+     * Android security blocks ACTION_SET_TEXT on locked devices but allows PASTE.
+     * ACTION_SET_TEXT is only used as fallback if paste left the field empty.
      */
     private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
         val nodePkg = node.packageName?.toString() ?: ""
@@ -366,30 +342,28 @@ class UssdAccessibilityService : AccessibilityService() {
 
         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
+        delay(200)
+
+        // PRIMARY: Clipboard PASTE — works even when phone is locked
+        // Android allows clipboard paste on lock screen but blocks ACTION_SET_TEXT
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
         delay(150)
+        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+        delay(200)
 
-        // Direct ACTION_SET_TEXT: Replaces the entire content of the editable field with [text].
-        val bundle = android.os.Bundle().apply {
-            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-        }
-        val setOk = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-        Log.d("UssdAccessibility", "ACTION_SET_TEXT result=$setOk for reply='$text'")
-
-        // Only if ACTION_SET_TEXT failed (unsupported node), try Clipboard PASTE fallback
-        if (!setOk) {
-            Log.w("UssdAccessibility", "ACTION_SET_TEXT returned false, trying Clipboard paste fallback")
-            try {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
-                delay(100)
-                target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-            } catch (e: Exception) {
-                Log.w("UssdAccessibility", "Clipboard paste fallback error: ${e.message}")
+        // FALLBACK: ACTION_SET_TEXT only if clipboard paste left the field empty
+        val currentText = target.text?.toString() ?: ""
+        if (currentText.isBlank()) {
+            Log.w("UssdAccessibility", "Clipboard paste left field empty — trying ACTION_SET_TEXT fallback")
+            val bundle = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             }
+            target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+            delay(200)
+        } else {
+            Log.d("UssdAccessibility", "Clipboard paste successful — field has: '$currentText'")
         }
-
-        // Wait 350ms for Android UI to commit text and enable the Positive/Send button
-        delay(350)
 
         // Click Send / Positive button
         val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa", "GELI", "Geli"))
@@ -397,14 +371,15 @@ class UssdAccessibilityService : AccessibilityService() {
         return sent
     }
 
+    /**
+     * Finds EditText using Geesh App's simpler check (className only, no isEditable requirement).
+     * isEditable flag is sometimes false on locked devices even for real EditText fields.
+     */
     private fun findEditText(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true) {
-            return node
-        }
+        if (node.className?.toString()?.contains("EditText", ignoreCase = true) == true) return node
         for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val r = findEditText(child)
+            val r = findEditText(node.getChild(i))
             if (r != null) return r
         }
         return null
