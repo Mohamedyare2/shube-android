@@ -66,6 +66,8 @@ import com.geesh.app.local.LocalPrefs
 
 import com.geesh.app.local.ProcessedTransaction
 
+import com.geesh.app.service.GeeshForegroundService
+
 import com.geesh.app.ussd.GeeshAccessibilityService
 
 import kotlinx.coroutines.delay
@@ -1151,6 +1153,8 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                                     prefs.lastBalanceCheckTimestamp = now
                                 }
 
+                                GeeshForegroundService.scheduleAlarm(context)
+
                                 saveMessage = if (it) "Eegidda Hadhaaga Tooska ah waa la shiday!" else "Eegidda Hadhaaga waa la damiyay!"
 
                             },
@@ -1369,6 +1373,8 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
                                     prefs.checkBalanceIntervalMinutes = intervalMinutes
 
                                     prefs.balanceCheckPin = balancePinInput.trim().ifBlank { null }
+
+                                    GeeshForegroundService.scheduleAlarm(context)
 
                                     saveMessage = "✅ Xogta Eegidda Hadhaaga si guul leh baa loo keydiyay!"
 

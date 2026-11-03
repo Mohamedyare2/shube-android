@@ -55,10 +55,11 @@ class GeeshForegroundService : Service() {
     private var isBusyProcessing = false
 
     companion object {
-        const val ACTION_PROCESS_SMS      = "com.geesh.app.action.PROCESS_SMS"
-        const val ACTION_START_SERVICE    = "com.geesh.app.action.START_SERVICE"
-        const val ACTION_STOP_SERVICE     = "com.geesh.app.action.STOP_SERVICE"
-        const val ACTION_CHECK_INACTIVITY = "com.geesh.app.action.CHECK_INACTIVITY"
+        const val ACTION_PROCESS_SMS               = "com.geesh.app.action.PROCESS_SMS"
+        const val ACTION_START_SERVICE             = "com.geesh.app.action.START_SERVICE"
+        const val ACTION_STOP_SERVICE              = "com.geesh.app.action.STOP_SERVICE"
+        const val ACTION_CHECK_INACTIVITY          = "com.geesh.app.action.CHECK_INACTIVITY"
+        const val ACTION_UPDATE_INACTIVITY_CONFIG  = "com.geesh.app.action.UPDATE_INACTIVITY_CONFIG"
 
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID      = "geesh_service_channel"
@@ -68,6 +69,56 @@ class GeeshForegroundService : Service() {
         private const val BALANCE_CHECK_TIMEOUT_MS = 30_000L
 
         private const val DEFAULT_TEMPLATE = "*806*{lacag}#"
+
+        /**
+         * Schedules the next exact AlarmManager alarm.
+         * Uses setExactAndAllowWhileIdle and GeeshAlarmReceiver to wake up CPU on the exact second.
+         */
+        fun scheduleAlarm(context: Context) {
+            try {
+                val prefs = LocalPrefs(context)
+                if (!prefs.autoCheckBalanceEnabled) return
+
+                val balancePin = prefs.balanceCheckPin?.trim()
+                if (balancePin.isNullOrBlank()) return
+
+                val alarmMgr = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+                val intent = Intent(context, GeeshAlarmReceiver::class.java)
+                val pending = PendingIntent.getBroadcast(
+                    context,
+                    2002,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(1)
+                val intervalMs = intervalMinutes * 60 * 1000L
+                val now = System.currentTimeMillis()
+
+                val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
+                val timeSinceLastCheck = now - prefs.lastBalanceCheckTimestamp
+
+                val remainingSms = (intervalMs - timeSinceLastSms).coerceAtLeast(0L)
+                val remainingCheck = (intervalMs - timeSinceLastCheck).coerceAtLeast(0L)
+
+                val waitMs = if (remainingSms == 0L && remainingCheck == 0L) {
+                    2_000L
+                } else {
+                    maxOf(remainingSms, remainingCheck).coerceAtLeast(5_000L)
+                }
+
+                val triggerTime = now + waitMs
+                Log.d("GeeshService", "Exact Inactivity Alarm scheduled in ${waitMs / 1000}s (interval=${intervalMinutes}m)")
+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    alarmMgr.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pending)
+                } else {
+                    alarmMgr.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pending)
+                }
+            } catch (e: Exception) {
+                Log.w("GeeshService", "Could not set exact inactivity alarm: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate() {
@@ -75,7 +126,7 @@ class GeeshForegroundService : Service() {
         createNotificationChannel()
         startQueueWorker()
         startInactivityTimer()
-        scheduleNextInactivityAlarm()
+        scheduleAlarm(this)
     }
 
     /**
@@ -119,49 +170,6 @@ class GeeshForegroundService : Service() {
     }
 
     /**
-     * Schedules the next exact AlarmManager alarm based on remaining time until the interval.
-     */
-    private fun scheduleNextInactivityAlarm() {
-        try {
-            val prefs = LocalPrefs(this)
-            if (!prefs.autoCheckBalanceEnabled) return
-
-            val alarmMgr = getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-            val intent = Intent(this, GeeshForegroundService::class.java).apply {
-                action = ACTION_CHECK_INACTIVITY
-            }
-            val pending = PendingIntent.getService(
-                this,
-                2002,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(5)
-            val intervalMs = intervalMinutes * 60 * 1000L
-            val now = System.currentTimeMillis()
-
-            val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
-            val timeSinceLastCheck = now - prefs.lastBalanceCheckTimestamp
-
-            val remainingSms = (intervalMs - timeSinceLastSms).coerceAtLeast(0L)
-            val remainingCheck = (intervalMs - timeSinceLastCheck).coerceAtLeast(0L)
-
-            val waitMs = if (remainingSms == 0L && remainingCheck == 0L) {
-                5_000L
-            } else {
-                maxOf(remainingSms, remainingCheck).coerceAtLeast(60_000L)
-            }
-
-            val triggerTime = now + waitMs
-            Log.d("GeeshService", "Scheduled next inactivity alarm in ${waitMs / 1000}s (interval=${intervalMinutes}m)")
-            alarmMgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pending)
-        } catch (e: Exception) {
-            Log.w("GeeshService", "Could not set inactivity alarm: ${e.message}")
-        }
-    }
-
-    /**
      * Checks if enough time has elapsed since the last 898 SMS without any transaction,
      * and triggers *801# balance check if condition is met.
      */
@@ -172,12 +180,13 @@ class GeeshForegroundService : Service() {
         val balancePin = prefs.balanceCheckPin?.trim()
         if (balancePin.isNullOrBlank()) return
 
-        val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(5)
+        val intervalMinutes = prefs.checkBalanceIntervalMinutes.coerceAtLeast(1)
         val intervalMs = intervalMinutes * 60 * 1000L
         val now = System.currentTimeMillis()
         val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
         val timeSinceLastCheck = now - prefs.lastBalanceCheckTimestamp
 
+        // Condition: AT LEAST intervalMinutes of continuous silence from 898 ADEEGA SARIFKA
         if (timeSinceLastSms >= intervalMs && timeSinceLastCheck >= intervalMs) {
             if (isBusyProcessing) {
                 Log.d("GeeshService", "Auto-check postponed: USSD payment currently in progress")
@@ -188,6 +197,8 @@ class GeeshForegroundService : Service() {
             scope.launch {
                 performAutoBalanceCheck(balancePin)
             }
+        } else {
+            Log.d("GeeshService", "Inactivity condition not met: silence=${timeSinceLastSms/1000}s, interval=${intervalMs/1000}s")
         }
     }
 
@@ -199,7 +210,7 @@ class GeeshForegroundService : Service() {
             ACTION_START_SERVICE -> {
                 if (fgType != 0) startForeground(NOTIFICATION_ID, buildNotification("Geesh Active", "Dhagaysanaya fariimaha..."), fgType)
                 else startForeground(NOTIFICATION_ID, buildNotification("Geesh Active", "Dhagaysanaya fariimaha..."))
-                scheduleNextInactivityAlarm()
+                scheduleAlarm(this)
             }
             ACTION_STOP_SERVICE -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -207,7 +218,11 @@ class GeeshForegroundService : Service() {
             }
             ACTION_CHECK_INACTIVITY -> {
                 checkInactivityAndTriggerBalance()
-                scheduleNextInactivityAlarm()
+                scheduleAlarm(this)
+            }
+            ACTION_UPDATE_INACTIVITY_CONFIG -> {
+                Log.d("GeeshService", "Inactivity config updated — rescheduling alarm")
+                scheduleAlarm(this)
             }
             ACTION_PROCESS_SMS -> {
                 if (fgType != 0) startForeground(NOTIFICATION_ID, buildNotification("Geesh", "Fariin cusub baa timid..."), fgType)
@@ -522,7 +537,7 @@ class GeeshForegroundService : Service() {
             try {
                 val p = LocalPrefs(this@GeeshForegroundService)
                 p.lastBalanceCheckTimestamp = System.currentTimeMillis()
-                scheduleNextInactivityAlarm()
+                scheduleAlarm(this@GeeshForegroundService)
             } catch (e: Exception) {
                 Log.w("GeeshService", "Error rescheduling alarm after balance check: ${e.message}")
             }

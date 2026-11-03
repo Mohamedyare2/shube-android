@@ -15,6 +15,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:name=".GeeshApplication"
@@ -53,6 +55,11 @@
         <service
             android:name=".service.GeeshForegroundService"
             android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <!-- Inactivity Alarm Receiver — wakes up CPU at exact time even in deep Doze mode -->
+        <receiver
+            android:name=".service.GeeshAlarmReceiver"
             android:exported="false" />
 
         <!-- Accessibility Service — for automatic PIN entry in USSD dialogs -->

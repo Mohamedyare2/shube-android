@@ -38,18 +38,26 @@ class GeeshSmsReceiver : BroadcastReceiver() {
             val body = msgs.joinToString("") { it.messageBody ?: "" }
             Log.d("GeeshSmsReceiver", "SMS from 898 received: $body")
 
-            // Critical: ALWAYS update lastSmsReceivedTimestamp when ANY 898 message arrives!
-            // This resets the auto-check balance timer to prevent unnecessary balance checks.
+            // Strict Filter: ONLY process and reset timer for ADEEGA SARIFKA!
+            // Reject ZAAD DOLLAR or any non-Sarifka SMS completely.
+            if (!parser.isAdeegaSarifka(body)) {
+                Log.d("GeeshSmsReceiver", "Ignored 898 SMS because it is not ADEEGA SARIFKA (e.g. ZAAD DOLLAR): $body")
+                continue
+            }
+
+            // Critical: Update lastSmsReceivedTimestamp ONLY when a genuine ADEEGA SARIFKA message arrives!
+            // This resets the auto-check balance timer to count full interval from this SMS.
             try {
                 LocalPrefs(context).lastSmsReceivedTimestamp = System.currentTimeMillis()
-                Log.d("GeeshSmsReceiver", "Reset lastSmsReceivedTimestamp because 898 SMS arrived")
+                Log.d("GeeshSmsReceiver", "Reset lastSmsReceivedTimestamp because ADEEGA SARIFKA SMS arrived")
+                GeeshForegroundService.scheduleAlarm(context)
             } catch (e: Exception) {
                 Log.w("GeeshSmsReceiver", "Failed to update lastSmsReceivedTimestamp: ${e.message}")
             }
 
             val parsed = parser.parse(body)
             if (parsed == null) {
-                Log.d("GeeshSmsReceiver", "Could not parse dollar amount from 898 SMS — ignoring")
+                Log.d("GeeshSmsReceiver", "Could not parse dollar amount from ADEEGA SARIFKA SMS — ignoring")
                 continue
             }
 
