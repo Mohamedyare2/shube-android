@@ -77,6 +77,17 @@ class GeeshAccessibilityService : AccessibilityService() {
         }
 
         /**
+         * Returns true if all queued replies have been filled and submitted.
+         */
+        fun isAllRepliesConsumed(): Boolean {
+            return synchronized(replyQueue) { replyQueue.isEmpty() }
+        }
+
+        fun getRemainingRepliesCount(): Int {
+            return synchronized(replyQueue) { replyQueue.size }
+        }
+
+        /**
          * Stops the USSD session and clears any remaining replies.
          */
         fun stopSession() {

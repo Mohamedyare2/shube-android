@@ -9,8 +9,8 @@ data class ProcessedTransaction(
     @PrimaryKey val tixraac: String,       // Unique transaction reference — prevents duplicates
     val amountDollar: Double,
     val smsBody: String,
-    val processedAt: Long = System.currentTimeMillis(),
-    val ussdResult: String = "pending"    // pending | success | failed | unknown
+    val processedAt: Long = System.currentTimeMillis(),   // Waqtiga SMS-ka timid / la diray
+    val ussdResult: String = "pending"                    // pending | success | failed | timeout | unknown
 )
 
 // ─── DAO ──────────────────────────────────────────────────────────────────────

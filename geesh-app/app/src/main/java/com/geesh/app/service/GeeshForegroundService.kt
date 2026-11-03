@@ -370,6 +370,11 @@ class GeeshForegroundService : Service() {
             }
 
             if (resultText == null) {
+                // If in Bank Mode and all 7 replies were successfully submitted, treat as success
+                if (isBankMode && GeeshAccessibilityService.isAllRepliesConsumed()) {
+                    Log.d("GeeshService", "All bank replies were submitted — treating as success despite timeout")
+                    return Pair("success", "Dhammaan reply-yadii bangiga waa la gudbiyay")
+                }
                 Log.e("GeeshService", "USSD timed out — no dialog received within ${timeoutMs}ms")
                 return Pair("timeout", "Waqtigu wuu dhamaaday")
             }
@@ -398,7 +403,7 @@ class GeeshForegroundService : Service() {
         val failureKeywords = listOf(
             "khalad", "failed", "error", "maku filna", "ma haysatid", "kuma filna",
             "ma shaqaynayo", "invalid", "lama heli karo", "waqtigu wuu dhamaaday",
-            "cancelled", "la kansalay", "waa la joojiyay"
+            "cancelled", "la kansalay", "waa la joojiyay", "ma jiro"
         )
         if (failureKeywords.any { lower.contains(it) }) {
             return false
@@ -406,7 +411,6 @@ class GeeshForegroundService : Service() {
 
         // 2. Success keywords
         return if (isBankMode) {
-            lower.contains("waxaad lacag dhigatay") ||
             lower.contains("dhigatay") ||
             lower.contains("dhigasho") ||
             lower.contains("lagu shubay") ||
@@ -415,22 +419,33 @@ class GeeshForegroundService : Service() {
             lower.contains("xisaabtaada") ||
             lower.contains("u wareejisay") ||
             lower.contains("wareejisay") ||
-            lower.contains("guul") ||
-            lower.contains("success")
-        } else {
-            (lower.contains("waxaad") && lower.contains("dirtay")) ||
-            (lower.contains("waxaad") && lower.contains("wareejisay")) ||
             lower.contains("u dirtay") ||
             lower.contains("dirtay") ||
             lower.contains("la diray") ||
-            lower.contains("u wareejisay") ||
+            lower.contains("guul") ||
+            lower.contains("success") ||
+            lower.contains("fuliyay") ||
+            lower.contains("qabtay") ||
+            lower.contains("mahadsan") ||
+            lower.contains("codsigaaga") ||
+            lower.contains("darasalaam") ||
+            lower.contains("dara-salaam") ||
+            lower.contains("waad") ||
+            GeeshAccessibilityService.isAllRepliesConsumed()
+        } else {
+            lower.contains("dirtay") ||
             lower.contains("wareejisay") ||
             lower.contains("sent") ||
             lower.contains("guul") ||
             lower.contains("success") ||
             lower.contains("hadhaagaagu waa") ||
             lower.contains("haraagaagu waa") ||
-            lower.contains("adeega sarifka")
+            lower.contains("adeega sarifka") ||
+            lower.contains("fuliyay") ||
+            lower.contains("qabtay") ||
+            lower.contains("mahadsan") ||
+            lower.contains("codsigaaga") ||
+            lower.contains("waad")
         }
     }
 
