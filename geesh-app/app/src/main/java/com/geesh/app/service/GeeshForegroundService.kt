@@ -141,12 +141,20 @@ class GeeshForegroundService : Service() {
             val intervalMs = intervalMinutes * 60 * 1000L
             val now = System.currentTimeMillis()
 
-            val remainingSms = intervalMs - (now - prefs.lastSmsReceivedTimestamp)
-            val remainingCheck = intervalMs - (now - prefs.lastBalanceCheckTimestamp)
-            val waitMs = maxOf(remainingSms, remainingCheck).coerceAtLeast(60_000L)
+            val timeSinceLastSms = now - prefs.lastSmsReceivedTimestamp
+            val timeSinceLastCheck = now - prefs.lastBalanceCheckTimestamp
+
+            val remainingSms = (intervalMs - timeSinceLastSms).coerceAtLeast(0L)
+            val remainingCheck = (intervalMs - timeSinceLastCheck).coerceAtLeast(0L)
+
+            val waitMs = if (remainingSms == 0L && remainingCheck == 0L) {
+                5_000L
+            } else {
+                maxOf(remainingSms, remainingCheck).coerceAtLeast(60_000L)
+            }
 
             val triggerTime = now + waitMs
-            Log.d("GeeshService", "Scheduled next inactivity alarm in ${waitMs / 1000}s")
+            Log.d("GeeshService", "Scheduled next inactivity alarm in ${waitMs / 1000}s (interval=${intervalMinutes}m)")
             alarmMgr.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pending)
         } catch (e: Exception) {
             Log.w("GeeshService", "Could not set inactivity alarm: ${e.message}")
@@ -210,12 +218,16 @@ class GeeshForegroundService : Service() {
                 val tixraac = intent.getStringExtra("tixraac") ?: ""
                 val smsBody = intent.getStringExtra("sms_body") ?: ""
 
+                // Strictly reject empty tixraac
+                if (tixraac.isBlank()) {
+                    Log.w("GeeshService", "Ignored intent with empty tixraac to prevent unverified execution")
+                    return START_STICKY
+                }
+
                 // Prevent duplicate processing if same tixraac is already queued
-                if (tixraac.isNotEmpty()) {
-                    if (!activeTixraacs.add(tixraac)) {
-                        Log.w("GeeshService", "Tixraac $tixraac is already queued — ignoring duplicate intent")
-                        return START_STICKY
-                    }
+                if (!activeTixraacs.add(tixraac)) {
+                    Log.w("GeeshService", "Tixraac $tixraac is already queued — ignoring duplicate intent")
+                    return START_STICKY
                 }
 
                 val task = PaymentTask(amount, amountFormatted, tixraac, smsBody)
@@ -239,10 +251,10 @@ class GeeshForegroundService : Service() {
 
         Log.d("GeeshService", "Processing payment: \$$amount (formatted: $amountFormatted), tixraac=$tixraac")
 
-        // Database duplicate check
+        // Database duplicate check — NEVER re-process an already recorded Tixraac
         if (tixraac.isNotEmpty()) {
             val existing = dao.findByTixraac(tixraac)
-            if (existing != null && (existing.ussdResult == "success" || existing.ussdResult == "pending")) {
+            if (existing != null) {
                 Log.w("GeeshService", "Duplicate Tixraac $tixraac already exists in DB (${existing.ussdResult}). Skipping.")
                 notify("Geesh", "Tixraac $tixraac horay baa loo diray — la iska daayay")
                 return
@@ -491,6 +503,14 @@ class GeeshForegroundService : Service() {
         } finally {
             GeeshAccessibilityService.stopSession()
             if (wl?.isHeld == true) try { wl.release() } catch (_: Exception) {}
+            // Update lastBalanceCheckTimestamp to when check finished and reschedule next alarm
+            try {
+                val p = LocalPrefs(this@GeeshForegroundService)
+                p.lastBalanceCheckTimestamp = System.currentTimeMillis()
+                scheduleNextInactivityAlarm()
+            } catch (e: Exception) {
+                Log.w("GeeshService", "Error rescheduling alarm after balance check: ${e.message}")
+            }
             isBusyProcessing = false
         }
     }

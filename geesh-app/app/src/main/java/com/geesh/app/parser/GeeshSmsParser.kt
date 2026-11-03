@@ -49,23 +49,78 @@ class GeeshSmsParser {
         Pattern.CASE_INSENSITIVE
     )
 
+    /**
+     * Checks if the SMS is strictly an incoming "ADEEGA SARIFKA" exchange message.
+     * Must contain "ADEEGA SARIFKA", "u sariftay", and must NOT be an outgoing transfer.
+     */
+    fun isAdeegaSarifka(body: String): Boolean {
+        val upper = body.uppercase()
+
+        // 1. Must contain "ADEEGA SARIFKA"
+        val hasSarifka = upper.contains("ADEEGA SARIFKA") || upper.contains("ADEEGA SARRIFKA") || upper.contains("SARIFKA")
+        if (!hasSarifka) {
+            return false
+        }
+
+        // 2. Reject regular ZAAD DOLLAR if no SARIFKA
+        if (upper.contains("ZAAD DOLLAR") && !upper.contains("ADEEGA SARIFKA")) {
+            return false
+        }
+
+        // 3. Reject any outgoing transfer confirmation messages to avoid double sending
+        if (upper.contains("U WAREEJISAY") ||
+            upper.contains("U DIRTAY") ||
+            upper.contains("AYAAD U DIRTAY") ||
+            upper.contains("DHIGATAY") ||
+            upper.contains("KU SHUBTAY")) {
+            Log.d("GeeshParser", "SMS ignored: Outgoing transfer confirmation, not an incoming exchange")
+            return false
+        }
+
+        // 4. Must strictly contain "u sariftay" (the distinct signature of an incoming customer exchange)
+        val hasSariftay = upper.contains("U SARIFTAY") || upper.contains("U SARRIFTAY") || upper.contains("SARIFTAY")
+        if (!hasSariftay) {
+            Log.d("GeeshParser", "SMS ignored: Missing 'u sariftay' keyword")
+            return false
+        }
+
+        return true
+    }
+
     fun parse(body: String): ParsedGeeshSms? {
-        // 1. Get the sent amount (the first $ match)
-        val amountMatcher = amountPattern.matcher(body)
-        if (!amountMatcher.find()) {
-            Log.d("GeeshParser", "No dollar amount found in SMS body")
+        // Enforce incoming ADEEGA SARIFKA check
+        if (!isAdeegaSarifka(body)) {
+            Log.d("GeeshParser", "SMS ignored: Not an incoming ADEEGA SARIFKA transaction")
             return null
         }
-        
-        val rawStr = amountMatcher.group(1) ?: return null
+
+        // 1. Get the sent amount directly from "Waxaad $X u sariftay"
+        val sariftayMatcher = Pattern.compile(
+            """Waxaad\s+\$([0-9]+(?:\.[0-9]+)?)\s+u\s+sariftay""",
+            Pattern.CASE_INSENSITIVE
+        ).matcher(body)
+
+        val rawStr = if (sariftayMatcher.find()) {
+            sariftayMatcher.group(1)
+        } else {
+            // Fallback to the first dollar amount
+            val amountMatcher = amountPattern.matcher(body)
+            if (amountMatcher.find()) amountMatcher.group(1) else null
+        } ?: return null
+
         val amountDouble = rawStr.toDoubleOrNull() ?: return null
-        
+
         // 2. Format it for USSD: replace '.' with '*' (e.g. "5.55" -> "5*55")
         val amountFormatted = rawStr.replace(".", "*")
 
-        // 3. Get Tixraac
+        // 3. Get Tixraac (mandatory)
         val tixraacMatcher = tixraacPattern.matcher(body)
         val tixraac = if (tixraacMatcher.find()) tixraacMatcher.group(1) else null
+
+        if (tixraac.isNullOrBlank()) {
+            Log.w("GeeshParser", "SMS ignored: Tixraac missing from Adeega Sarifka SMS")
+            return null
+        }
 
         Log.d("GeeshParser", "Final: amountDollar=\$$amountDouble, formatted=$amountFormatted, tixraac=$tixraac")
         return ParsedGeeshSms(amountDollar = amountDouble, amountFormatted = amountFormatted, tixraac = tixraac)

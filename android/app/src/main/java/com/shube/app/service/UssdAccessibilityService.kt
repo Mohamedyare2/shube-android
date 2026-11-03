@@ -240,22 +240,27 @@ class UssdAccessibilityService : AccessibilityService() {
             Log.d("UssdAccessibility", "Expecting input dialog for reply: $currentReply (remaining: ${replyQueue.size})")
 
             CoroutineScope(Dispatchers.Main).launch {
-                var targetNode: AccessibilityNodeInfo? = null
-                var attempts = 0
-                while (attempts < 40 && isUssdSessionActive) {
-                    delay(250)
-                    val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
-                        ?: findUssdRootNode()
+                val initialEdit = rootNode.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+                    ?: findEditText(rootNode)
+                var targetNode: AccessibilityNodeInfo? = if (initialEdit != null) rootNode else null
 
-                    if (freshRoot != null && isTelephonyPackage(freshRoot.packageName?.toString())) {
-                        val edit = freshRoot.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
-                            ?: findEditText(freshRoot)
-                        if (edit != null) {
-                            targetNode = freshRoot
-                            break
+                if (targetNode == null) {
+                    var attempts = 0
+                    while (attempts < 40 && isUssdSessionActive) {
+                        delay(250)
+                        val freshRoot = rootInActiveWindow?.takeIf { isTelephonyPackage(it.packageName?.toString()) }
+                            ?: findUssdRootNode()
+
+                        if (freshRoot != null && isTelephonyPackage(freshRoot.packageName?.toString())) {
+                            val edit = freshRoot.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+                                ?: findEditText(freshRoot)
+                            if (edit != null) {
+                                targetNode = freshRoot
+                                break
+                            }
                         }
+                        attempts++
                     }
-                    attempts++
                 }
 
                 if (targetNode != null && isTelephonyPackage(targetNode.packageName?.toString())) {
@@ -271,7 +276,9 @@ class UssdAccessibilityService : AccessibilityService() {
                     clickButton(freshRoot, listOf("OK", "DISMISS", "CANCEL", "DONE", "XIDH"))
                 }
 
-                delay(200)
+                // Wait 1.5s before releasing the guard to prevent poller from re-triggering
+                // on the same dialog window (which would cause double-input like "1" → "11")
+                delay(1500)
                 isProcessingDialog = false
             }
         } else {
@@ -338,7 +345,7 @@ class UssdAccessibilityService : AccessibilityService() {
 
     /**
      * Enters [text] into the USSD reply dialog and presses Send.
-     * Uses direct ACTION_SET_TEXT primary + Clipboard PASTE fallback.
+     * Uses direct ACTION_SET_TEXT (the standard Android Accessibility API for text entry/replacement).
      */
     private suspend fun fillAndSubmit(node: AccessibilityNodeInfo, text: String): Boolean {
         val nodePkg = node.packageName?.toString() ?: ""
@@ -347,8 +354,10 @@ class UssdAccessibilityService : AccessibilityService() {
             return false
         }
 
-        val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
-        val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
+        val target = node.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.sh.smart.caller:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.android.phone:id/input").firstOrNull()
+            ?: findEditText(node)
 
         if (target == null) {
             Log.e("UssdAccessibility", "No EditText found in USSD dialog — cannot enter reply")
@@ -359,37 +368,43 @@ class UssdAccessibilityService : AccessibilityService() {
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
         delay(150)
 
-        // 1. Direct ACTION_SET_TEXT
+        // Direct ACTION_SET_TEXT: Replaces the entire content of the editable field with [text].
         val bundle = android.os.Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
-        target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-        delay(150)
+        val setOk = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        Log.d("UssdAccessibility", "ACTION_SET_TEXT result=$setOk for reply='$text'")
 
-        // 2. Fallback to Clipboard PASTE if text was not populated
-        val currentText = target.text?.toString() ?: ""
-        if (!currentText.contains(text)) {
+        // Only if ACTION_SET_TEXT failed (unsupported node), try Clipboard PASTE fallback
+        if (!setOk) {
+            Log.w("UssdAccessibility", "ACTION_SET_TEXT returned false, trying Clipboard paste fallback")
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                 clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
                 delay(100)
                 target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                delay(150)
             } catch (e: Exception) {
                 Log.w("UssdAccessibility", "Clipboard paste fallback error: ${e.message}")
             }
         }
 
-        // 3. Click Send / Positive button
+        // Wait 350ms for Android UI to commit text and enable the Positive/Send button
+        delay(350)
+
+        // Click Send / Positive button
         val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa", "GELI", "Geli"))
         Log.d("UssdAccessibility", "Send button clicked: $sent for reply: $text")
         return sent
     }
 
-    private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.className?.toString()?.contains("EditText") == true) return node
+    private fun findEditText(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true) {
+            return node
+        }
         for (i in 0 until node.childCount) {
-            val r = findEditText(node.getChild(i))
+            val child = node.getChild(i) ?: continue
+            val r = findEditText(child)
             if (r != null) return r
         }
         return null
@@ -406,16 +421,18 @@ class UssdAccessibilityService : AccessibilityService() {
         for (id in standardBtnIds) {
             val btns = node.findAccessibilityNodeInfosByViewId(id)
             for (btn in btns) {
-                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
-                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.isClickable && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
             }
         }
 
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
             for (btn in buttons) {
-                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
-                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.isClickable && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
             }
         }
         return false
