@@ -18,7 +18,7 @@ import kotlinx.coroutines.withTimeout
 data class UssdStep(
     val type: String,
     val ussdCodeTemplate: String? = null,
-    val timeoutMs: Long = 15_000,
+    val timeoutMs: Long = 30_000,
     val value: String? = null,
     val successPatterns: List<String>? = null,
     val failurePatterns: List<String>? = null
@@ -74,6 +74,9 @@ class UssdStateMachine(private val context: Context) {
         var lastCapturedDialogText: String? = null
         var lastCapturedTimestamp: Long = 0L
 
+        // ── TELEPHONY ISOLATION: activate accessibility service for this session ──
+        UssdAccessibilityService.startSession()
+
         try {
             for ((index, step) in steps.withIndex()) {
                 Log.d("UssdStateMachine", "Executing Step ${index + 1}: ${step.type}")
@@ -103,9 +106,11 @@ class UssdStateMachine(private val context: Context) {
                                 diagnosticReason = "CALL_PHONE permission not granted or call failed"
                             )
                         }
+                        kotlinx.coroutines.delay(500)
                     }
                     
                     "WAIT_RESPONSE" -> {
+                        UssdAccessibilityService.startWaitingForFinalResponse()
                         val event = waitForDialog(step.timeoutMs, transactionStartTime)
                         lastCapturedDialogText = event.text
                         lastCapturedTimestamp = event.timestamp
@@ -151,6 +156,7 @@ class UssdStateMachine(private val context: Context) {
                     }
                     
                     "READ_RESPONSE" -> {
+                        UssdAccessibilityService.startWaitingForFinalResponse()
                         // Wait for the final outcome dialog to appear after the last reply was sent
                         try {
                             val event = waitForDialog(step.timeoutMs, transactionStartTime)
@@ -201,6 +207,9 @@ class UssdStateMachine(private val context: Context) {
                 rawResponseText = lastCapturedDialogText,
                 diagnosticReason = "Exception during USSD execution: ${e.message}"
             )
+        } finally {
+            // ── TELEPHONY ISOLATION: always stop session when done ────────────
+            UssdAccessibilityService.stopSession()
         }
     }
     

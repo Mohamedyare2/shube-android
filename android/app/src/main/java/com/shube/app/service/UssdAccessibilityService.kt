@@ -333,6 +333,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val target = node.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
             ?: node.findAccessibilityNodeInfosByViewId("com.sh.smart.caller:id/input").firstOrNull()
             ?: node.findAccessibilityNodeInfosByViewId("com.android.phone:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.transsion.telephony:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.transsion.smartcaller:id/input").firstOrNull()
             ?: findEditText(node)
 
         if (target == null) {
@@ -342,28 +344,81 @@ class UssdAccessibilityService : AccessibilityService() {
 
         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        delay(200)
-
-        // PRIMARY: Clipboard PASTE — works even when phone is locked
-        // Android allows clipboard paste on lock screen but blocks ACTION_SET_TEXT
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
         delay(150)
-        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-        delay(200)
 
-        // FALLBACK: ACTION_SET_TEXT only if clipboard paste left the field empty
-        val currentText = target.text?.toString() ?: ""
-        if (currentText.isBlank()) {
-            Log.w("UssdAccessibility", "Clipboard paste left field empty — trying ACTION_SET_TEXT fallback")
-            val bundle = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-            delay(200)
-        } else {
-            Log.d("UssdAccessibility", "Clipboard paste successful — field has: '$currentText'")
+        var isTextVerified = false
+
+        // ── 1. PRIMARY: DIRECT ACTION_SET_TEXT ───────────────────────────
+        // The official Android platform Accessibility action (API 21+).
+        // Does NOT touch or depend on Clipboard. Works on lockscreen across all Android 7.0-15+ devices.
+        val bundle = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
+        val setOk = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        delay(150)
+
+        var currentText = target.text?.toString()?.trim() ?: ""
+        if (currentText == text) {
+            Log.d("UssdAccessibility", "ACTION_SET_TEXT succeeded directly! Field verified with exact text: '$currentText'")
+            isTextVerified = true
+        } else {
+            Log.w("UssdAccessibility", "ACTION_SET_TEXT result: setOk=$setOk, fieldText='$currentText', expected='$text'")
+        }
+
+        // ── 2. SECONDARY: VERIFIED CLIPBOARD PASTE ───────────────────────
+        // Only attempted if ACTION_SET_TEXT did not match and ONLY if clipboard actually wrote [text]!
+        // On Infinix Hot 50i, Transsion OS blocks background setPrimaryClip when locked.
+        // If clipText does not equal [text], we STRICTLY AVOID calling ACTION_PASTE to never paste old user data!
+        if (!isTextVerified) {
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+                    delay(150)
+
+                    val clipItem = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                    val clipText = clipItem?.text?.toString()?.trim()
+
+                    if (clipText == text) {
+                        Log.d("UssdAccessibility", "Clipboard verified containing '$text'. Performing ACTION_PASTE...")
+                        target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+                        })
+                        delay(100)
+                        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                        delay(150)
+
+                        currentText = target.text?.toString()?.trim() ?: ""
+                        if (currentText == text) {
+                            Log.d("UssdAccessibility", "Verified clipboard paste succeeded! Field has: '$currentText'")
+                            isTextVerified = true
+                        }
+                    } else {
+                        Log.w("UssdAccessibility", "Clipboard write blocked by OS (holds '$clipText' instead of '$text'). Skipping paste to protect user data!")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("UssdAccessibility", "Clipboard fallback error: ${e.message}")
+            }
+        }
+
+        // ── 3. TERTIARY: RETRY ACTION_SET_TEXT WITH FOCUS RE-ACQUIRE ──────
+        if (!isTextVerified) {
+            Log.w("UssdAccessibility", "Retrying ACTION_SET_TEXT with explicit focus re-acquire...")
+            target.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
+            delay(100)
+            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            delay(100)
+            target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+            delay(150)
+            currentText = target.text?.toString()?.trim() ?: ""
+            if (currentText == text) {
+                isTextVerified = true
+            }
+        }
+
+        Log.d("UssdAccessibility", "Submitting USSD dialog with field: '$currentText' (verified=$isTextVerified)")
+        delay(250)
 
         // Click Send / Positive button
         val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa", "GELI", "Geli"))
@@ -372,12 +427,14 @@ class UssdAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Finds EditText using Geesh App's simpler check (className only, no isEditable requirement).
-     * isEditable flag is sometimes false on locked devices even for real EditText fields.
+     * Finds EditText view using class name check or editable check.
      */
     private fun findEditText(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.className?.toString()?.contains("EditText", ignoreCase = true) == true) return node
+        val cls = node.className?.toString() ?: ""
+        if (cls.contains("EditText", ignoreCase = true) || (node.isEditable && cls.contains("Text", ignoreCase = true))) {
+            return node
+        }
         for (i in 0 until node.childCount) {
             val r = findEditText(node.getChild(i))
             if (r != null) return r
@@ -391,7 +448,9 @@ class UssdAccessibilityService : AccessibilityService() {
             "com.android.phone:id/button1",
             "com.sh.smart.caller:id/button1",
             "com.transsion.telephony:id/button1",
-            "com.transsion.smartcaller:id/button1"
+            "com.transsion.smartcaller:id/button1",
+            "com.google.android.dialer:id/button1",
+            "com.samsung.android.incallui:id/button1"
         )
         for (id in standardBtnIds) {
             val btns = node.findAccessibilityNodeInfosByViewId(id)

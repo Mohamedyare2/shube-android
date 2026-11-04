@@ -314,8 +314,12 @@ class GeeshAccessibilityService : AccessibilityService() {
             return false
         }
 
-        val editTexts = node.findAccessibilityNodeInfosByViewId("android:id/input")
-        val target = if (editTexts.isNotEmpty()) editTexts[0] else findEditText(node)
+        val target = node.findAccessibilityNodeInfosByViewId("android:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.sh.smart.caller:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.android.phone:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.transsion.telephony:id/input").firstOrNull()
+            ?: node.findAccessibilityNodeInfosByViewId("com.transsion.smartcaller:id/input").firstOrNull()
+            ?: findEditText(node)
 
         if (target == null) {
             Log.e("GeeshAccessibility", "No EditText found in USSD dialog — cannot enter reply")
@@ -324,31 +328,92 @@ class GeeshAccessibilityService : AccessibilityService() {
 
         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
         target.performAction(AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS)
-        delay(200)
-
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        clipboard?.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
         delay(150)
 
-        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-        delay(200)
+        var isTextVerified = false
 
-        val currentText = target.text?.toString() ?: ""
-        if (currentText.isBlank()) {
-            val bundle = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
-            }
-            target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
-            delay(200)
+        // ── 1. PRIMARY: DIRECT ACTION_SET_TEXT ───────────────────────────
+        // Official Android platform action (API 21+). Does NOT touch clipboard.
+        val bundle = android.os.Bundle().apply {
+            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        }
+        val setOk = target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+        delay(150)
+
+        var currentText = target.text?.toString()?.trim() ?: ""
+        if (currentText == text) {
+            Log.d("GeeshAccessibility", "ACTION_SET_TEXT succeeded directly! Field verified: '$currentText'")
+            isTextVerified = true
+        } else {
+            Log.w("GeeshAccessibility", "ACTION_SET_TEXT result: setOk=$setOk, fieldText='$currentText', expected='$text'")
         }
 
-        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir"))
-        Log.d("GeeshAccessibility", "Send button clicked: $sent")
+        // ── 2. SECONDARY: VERIFIED CLIPBOARD PASTE ───────────────────────
+        // Only attempted if ACTION_SET_TEXT did not match and ONLY if clipboard actually wrote [text]!
+        // On Infinix Hot 50i, Transsion OS blocks background setPrimaryClip when locked.
+        // If clipText != text, we NEVER call ACTION_PASTE to avoid pasting old user data!
+        if (!isTextVerified) {
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(ClipData.newPlainText("ussd_reply", text))
+                    delay(150)
+
+                    val clipItem = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                    val clipText = clipItem?.text?.toString()?.trim()
+
+                    if (clipText == text) {
+                        Log.d("GeeshAccessibility", "Clipboard verified containing '$text'. Performing ACTION_PASTE...")
+                        target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                            putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+                        })
+                        delay(100)
+                        target.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                        delay(150)
+
+                        currentText = target.text?.toString()?.trim() ?: ""
+                        if (currentText == text) {
+                            Log.d("GeeshAccessibility", "Verified clipboard paste succeeded! Field has: '$currentText'")
+                            isTextVerified = true
+                        }
+                    } else {
+                        Log.w("GeeshAccessibility", "Clipboard write blocked by OS (holds '$clipText' instead of '$text'). Skipping paste to protect user data!")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("GeeshAccessibility", "Clipboard fallback error: ${e.message}")
+            }
+        }
+
+        // ── 3. TERTIARY: RETRY ACTION_SET_TEXT WITH FOCUS RE-ACQUIRE ──────
+        if (!isTextVerified) {
+            Log.w("GeeshAccessibility", "Retrying ACTION_SET_TEXT with explicit focus re-acquire...")
+            target.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
+            delay(100)
+            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+            delay(100)
+            target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, bundle)
+            delay(150)
+            currentText = target.text?.toString()?.trim() ?: ""
+            if (currentText == text) {
+                isTextVerified = true
+            }
+        }
+
+        Log.d("GeeshAccessibility", "Submitting USSD dialog with field: '$currentText' (verified=$isTextVerified)")
+        delay(250)
+
+        val sent = clickButton(node, listOf("SEND", "Send", "OK", "Ok", "REPLY", "Reply", "DIR", "Dir", "HAA", "Haa", "GELI", "Geli"))
+        Log.d("GeeshAccessibility", "Send button clicked: $sent for reply: $text")
         return sent
     }
 
-    private fun findEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.className?.toString()?.contains("EditText") == true) return node
+    private fun findEditText(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        val cls = node.className?.toString() ?: ""
+        if (cls.contains("EditText", ignoreCase = true) || (node.isEditable && cls.contains("Text", ignoreCase = true))) {
+            return node
+        }
         for (i in 0 until node.childCount) {
             val r = findEditText(node.getChild(i))
             if (r != null) return r
@@ -357,20 +422,30 @@ class GeeshAccessibilityService : AccessibilityService() {
     }
 
     private fun clickButton(node: AccessibilityNodeInfo, labels: List<String>): Boolean {
-        val standardBtnIds = listOf("android:id/button1", "com.android.phone:id/button1")
+        val standardBtnIds = listOf(
+            "android:id/button1",
+            "com.android.phone:id/button1",
+            "com.sh.smart.caller:id/button1",
+            "com.transsion.telephony:id/button1",
+            "com.transsion.smartcaller:id/button1",
+            "com.google.android.dialer:id/button1",
+            "com.samsung.android.incallui:id/button1"
+        )
         for (id in standardBtnIds) {
             val btns = node.findAccessibilityNodeInfosByViewId(id)
             for (btn in btns) {
-                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
-                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.isClickable && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
             }
         }
 
         for (label in labels) {
             val buttons = node.findAccessibilityNodeInfosByText(label)
             for (btn in buttons) {
-                if (btn.isClickable) { btn.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
-                if (btn.parent?.isClickable == true) { btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK); return true }
+                if (btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.isClickable && btn.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (btn.parent?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return true
             }
         }
         return false
