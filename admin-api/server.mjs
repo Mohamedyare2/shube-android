@@ -122,13 +122,26 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "shube-a
 app.post("/api/operators", async (req, res) => {
   if (!callerJwt(req)) return res.status(401).json({ error: "Unauthorized — missing bearer token" });
 
-  let { email, password, full_name, username, phone_number, notes, actor_id, app_type } = req.body || {};
+  let { email, password, full_name, username, phone_number, notes, actor_id, app_type, subscription_days, subscription_hours, subscription_minutes } = req.body || {};
   
   if (!email && username) {
     if (app_type === 'shube') {
       email = `${username}@shube.app`;
     } else {
       email = `${username}@geesh.app`;
+    }
+  }
+
+  let subscription_expires_at = null;
+  let activation_code = null;
+  let activation_code_duration_minutes = null;
+
+  if (app_type === 'geesh') {
+    const totalMinutes = (parseInt(subscription_days) || 0) * 1440 + (parseInt(subscription_hours) || 0) * 60 + (parseInt(subscription_minutes) || 0);
+    if (totalMinutes > 0) {
+      activation_code_duration_minutes = totalMinutes;
+      subscription_expires_at = new Date(Date.now() + totalMinutes * 60 * 1000).toISOString();
+      activation_code = Math.floor(10000000 + Math.random() * 90000000).toString();
     }
   }
 
@@ -177,6 +190,9 @@ app.post("/api/operators", async (req, res) => {
         app_type: req.body.app_type || 'shube',
         ussd_template: req.body.ussd_template || undefined,
         ussd_reply_template: req.body.ussd_reply_template || undefined,
+        subscription_expires_at: subscription_expires_at || undefined,
+        activation_code: activation_code || undefined,
+        activation_code_duration_minutes: activation_code_duration_minutes || undefined,
       }),
     });
     const opData = await opResp.json();
@@ -188,7 +204,13 @@ app.post("/api/operators", async (req, res) => {
       body: JSON.stringify({ actor_id, actor_role: "admin", action: "operator_created", resource_type: "operator", resource_id: userId, description: `Created operator ${username}` }),
     }).catch(() => {});
 
-    return res.status(201).json({ user_id: userId, operator: Array.isArray(opData) ? opData[0] : opData });
+    return res.status(201).json({
+      user_id: userId,
+      operator: Array.isArray(opData) ? opData[0] : opData,
+      subscription_expires_at,
+      activation_code,
+      duration_minutes: activation_code_duration_minutes
+    });
   } catch (err) {
     console.error("[create-operator]", err);
     return res.status(500).json({ error: err.message || "Internal server error" });

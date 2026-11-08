@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 :: SHUBE Admin API — Setup & Start Script
 :: This script installs Python (if missing) and starts the Flask server
 
@@ -79,4 +79,4 @@ echo  SHUBE Admin API running on port 5050
 echo  http://localhost:5050/api/health
 echo =========================================
 echo.
-venv\Scripts\python.exe app.py
+node server.mjs
