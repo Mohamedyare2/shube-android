@@ -593,15 +593,24 @@ export default function OperatorsPage() {
                     <td>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                          {op.subscription_expires_at ? (
-                            new Date(op.subscription_expires_at).getTime() < Date.now() ? (
-                              <span style={{ color: 'var(--brand-danger)' }}>❌ Dhacday</span>
-                            ) : (
-                              <span style={{ color: 'var(--brand-success)' }}>
-                                ✅ {new Date(op.subscription_expires_at).toLocaleDateString()} {new Date(op.subscription_expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </span>
+                          {op.subscription_expires_at ? (() => {
+                            const diff = new Date(op.subscription_expires_at).getTime() - Date.now()
+                            if (diff <= 0) return <span style={{ color: 'var(--brand-danger)' }}>❌ Dhacday</span>
+                            const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+                            const hours = Math.floor((diff / (1000 * 60 * 60)) % 24)
+                            const minutes = Math.floor((diff / (1000 * 60)) % 60)
+                            const remStr = days > 0 ? `${days}d ${hours}h u hadhay` : hours > 0 ? `${hours}h ${minutes}m u hadhay` : `${minutes}m u hadhay`
+                            return (
+                              <div>
+                                <span style={{ color: days >= 2 ? 'var(--brand-success)' : '#f59e0b' }}>
+                                  ⏳ {remStr}
+                                </span>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                                  Dhacaysa: {new Date(op.subscription_expires_at).toLocaleDateString()} {new Date(op.subscription_expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </div>
                             )
-                          ) : (
+                          })() : (
                             <span style={{ color: 'var(--text-muted)' }}>⚪ Weli lama kicin</span>
                           )}
                         </div>

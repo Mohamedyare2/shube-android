@@ -2,6 +2,11 @@ package com.geesh.app.ui.screens
 
 
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import com.geesh.app.network.ApiClient
 import android.content.Intent
 
 import android.provider.Settings
@@ -117,6 +122,24 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
 
     val username = prefs.username ?: "Operator"
+
+    val deviceId = remember {
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN_DEVICE"
+    }
+
+    var remainingTimeText by remember { mutableStateOf(prefs.formatRemainingTime()) }
+    var remainingMillis by remember { mutableStateOf(prefs.getRemainingTimeMillis()) }
+    var expiryDateStr by remember { mutableStateOf(prefs.formatExpiryDate()) }
+    var showRenewModal by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            remainingTimeText = prefs.formatRemainingTime()
+            remainingMillis = prefs.getRemainingTimeMillis()
+            expiryDateStr = prefs.formatExpiryDate()
+            delay(1000)
+        }
+    }
 
 
 
@@ -361,6 +384,22 @@ fun GeeshMainScreen(onLogout: () -> Unit = {}) {
             Spacer(Modifier.height(20.dp))
 
 
+
+            // ── Subscription Status Alert & Live Countdown ──────────────────────
+            SubscriptionStatusBanner(
+                remainingText = remainingTimeText,
+                remainingMillis = remainingMillis,
+                expiryDateStr = expiryDateStr,
+                deviceId = deviceId,
+                onRenewClick = { showRenewModal = true },
+                onCopyDeviceId = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("Device ID", deviceId))
+                    Toast.makeText(context, "Device ID: $deviceId waa la koobiyeeyay!", Toast.LENGTH_SHORT).show()
+                }
+            )
+
+            Spacer(Modifier.height(18.dp))
 
             // ── Accessibility Status Alert ─────────────────────────────────────
 
@@ -2736,3 +2775,407 @@ private fun StatsMiniCard(
 
 }
 
+
+
+// ─── Subscription Status & Renewal Components ───────────────────────────────
+
+@Composable
+fun SubscriptionStatusBanner(
+    remainingText: String,
+    remainingMillis: Long,
+    expiryDateStr: String,
+    deviceId: String,
+    onRenewClick: () -> Unit,
+    onCopyDeviceId: () -> Unit
+) {
+    val isCritical = remainingMillis in 1L..(60 * 60 * 1000L) // Under 1 hour
+    val isWarning = remainingMillis in (60 * 60 * 1000L)..(24 * 60 * 60 * 1000L) // Under 24 hours
+    val isExpired = remainingMillis <= 0L
+
+    val borderBrush = when {
+        isCritical || isExpired -> Brush.linearGradient(listOf(Color(0xFFEF4444), Color(0xFFDC2626)))
+        isWarning -> Brush.linearGradient(listOf(Color(0xFFF59E0B), Color(0xFFD97706)))
+        else -> Brush.linearGradient(listOf(Color(0xFF06B6D4), Color(0xFF3B82F6)))
+    }
+
+    val cardBg = when {
+        isCritical || isExpired -> Color(0xFF2A0808)
+        isWarning -> Color(0xFF2B1D06)
+        else -> Color(0xFF0E1A2D)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = CardDefaults.outlinedCardBorder().copy(brush = borderBrush)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                when {
+                                    isCritical || isExpired -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                                    isWarning -> Color(0xFFF59E0B).copy(alpha = 0.2f)
+                                    else -> Color(0xFF06B6D4).copy(alpha = 0.2f)
+                                }
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isCritical || isExpired) "🚨" else if (isWarning) "⏳" else "🔑",
+                            fontSize = 18.sp
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "RUKHSADDA GEESH",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            letterSpacing = 0.8.sp
+                        )
+                        Text(
+                            text = "Dhacaysa: $expiryDateStr",
+                            fontSize = 11.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when {
+                                isExpired -> Color(0xFFEF4444)
+                                isCritical -> Color(0xFFEF4444)
+                                isWarning -> Color(0xFFF59E0B)
+                                else -> Color(0xFF10B981)
+                            }
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = when {
+                            isExpired -> "DHACDAY"
+                            isCritical -> "DEGDEG AH"
+                            isWarning -> "GABAABSI"
+                            else -> "SHAQAYNAYSA"
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Waqtiga kuu hadhay:",
+                    fontSize = 11.sp,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = remainingText,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    color = when {
+                        isCritical || isExpired -> Color(0xFFF87171)
+                        isWarning -> Color(0xFFFBBF24)
+                        else -> Color(0xFF38BDF8)
+                    },
+                    letterSpacing = 0.5.sp
+                )
+            }
+
+            if (isWarning || isCritical) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "⚠️ Digniin: Waqtigaagu wuu sii dhamaanayaa. Fadlan maamulka koodh cusub ka qaado si aanay shaqadu kuugu istaagin.",
+                    fontSize = 11.sp,
+                    color = if (isCritical) Color(0xFFFCA5A5) else Color(0xFFFDE68A),
+                    lineHeight = 15.sp
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onRenewClick,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when {
+                            isCritical || isExpired -> Color(0xFFEF4444)
+                            isWarning -> Color(0xFFF59E0B)
+                            else -> Color(0xFF0EA5E9)
+                        }
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "🔑 Kordhi / Cusboonaysii",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onCopyDeviceId,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF94A3B8)
+                    ),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.linearGradient(listOf(Color(0xFF334155), Color(0xFF475569)))
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "📋 Copy Device ID",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFCBD5E1)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RenewSubscriptionDialog(
+    deviceId: String,
+    onDismiss: () -> Unit,
+    onRenewSuccess: (newExpiry: Long) -> Unit
+) {
+    val context = LocalContext.current
+    val prefs = remember { LocalPrefs(context) }
+    val scope = rememberCoroutineScope()
+
+    var codeInput by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var successMessage by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        containerColor = Color(0xFF0F172A),
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🔑", fontSize = 22.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Kordhi Rukhsadda",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Geli 8-da lambar ee uu Admin-ku kuu soo diray si aad waqti dheeraad ah ugu darsato inta ayna shaqadu kaa joogsan.",
+                    fontSize = 12.sp,
+                    color = Color(0xFF94A3B8),
+                    lineHeight = 17.sp
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1E293B))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Device ID:", fontSize = 10.sp, color = Color(0xFF64748B))
+                            Text(deviceId, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                        }
+                        TextButton(
+                            onClick = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("Device ID", deviceId))
+                                Toast.makeText(context, "Device ID waa la koobiyeeyay!", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Copy", fontSize = 11.sp, color = Color(0xFF38BDF8))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                OutlinedTextField(
+                    value = codeInput,
+                    onValueChange = { if (it.length <= 8 && it.all { c -> c.isDigit() }) codeInput = it },
+                    label = { Text("8-da Lambar ee Rukhsadda", color = Color(0xFF94A3B8)) },
+                    placeholder = { Text("12345678", color = Color(0xFF475569)) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF0EA5E9),
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedLabelColor = Color(0xFF0EA5E9),
+                        cursorColor = Color(0xFF0EA5E9),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                if (errorMessage != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = errorMessage!!,
+                        color = Color(0xFFEF4444),
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (successMessage != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = successMessage!!,
+                        color = Color(0xFF10B981),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "🌐 Xusuusin: Telefoonku waa inuu Internet-ka ku xidhan yahay inta aad koodhka gelinayso.",
+                    fontSize = 10.sp,
+                    color = Color(0xFF64748B),
+                    lineHeight = 14.sp
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (codeInput.length != 8) {
+                        errorMessage = "Fadlan geli 8-da lambar oo buuxa"
+                        return@Button
+                    }
+                    isLoading = true
+                    errorMessage = null
+                    successMessage = null
+
+                    scope.launch {
+                        val result = ApiClient.activateLicense(prefs.baseUrl, deviceId, codeInput)
+                        isLoading = false
+                        result.fold(
+                            onSuccess = { res ->
+                                val expStr = res.optString("subscription_expires_at", "")
+                                val expTimestamp = res.optLong("expires_timestamp", 0L)
+
+                                var newExp = 0L
+                                if (expTimestamp > 0L) {
+                                    newExp = expTimestamp
+                                    prefs.subscriptionExpiresAt = expTimestamp
+                                } else if (expStr.isNotBlank()) {
+                                    try {
+                                        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {
+                                            timeZone = TimeZone.getTimeZone("UTC")
+                                        }
+                                        val parsed = sdf.parse(expStr)
+                                        if (parsed != null) {
+                                            newExp = parsed.time
+                                            prefs.subscriptionExpiresAt = parsed.time
+                                        }
+                                    } catch (e: Exception) {
+                                        newExp = System.currentTimeMillis() + (30L * 24 * 60 * 60 * 1000)
+                                        prefs.subscriptionExpiresAt = newExp
+                                    }
+                                }
+
+                                prefs.isClockTampered = false
+                                prefs.isDeviceRevoked = false
+                                prefs.lastRecordedTimestamp = System.currentTimeMillis()
+
+                                successMessage = "✅ Rukhsadda si guul leh baa loo kordhiyay!"
+                                Toast.makeText(context, "✅ Rukhsaddaadii waa la kordhiyay!", Toast.LENGTH_LONG).show()
+
+                                delay(1200)
+                                onRenewSuccess(newExp)
+                                onDismiss()
+                            },
+                            onFailure = { err ->
+                                errorMessage = err.message ?: "Koodhkaagu ma saxna ama internet-ka ayaa go'an."
+                            }
+                        )
+                    }
+                },
+                enabled = !isLoading && codeInput.length == 8,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0EA5E9)),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Hubinaya...", fontSize = 12.sp)
+                } else {
+                    Text("Kordhi Waqtiga", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            if (!isLoading) {
+                TextButton(onClick = onDismiss) {
+                    Text("Ka Noqo", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                }
+            }
+        }
+    )
+}

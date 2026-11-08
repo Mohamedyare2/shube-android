@@ -137,22 +137,36 @@ class LocalPrefs(context: Context) {
     }
 
     fun formatRemainingTime(): String {
-        if (isDeviceRevoked) return "Qalabka waa la joojiyay (Revoked)"
-        if (isClockTampered) return "Saacadda dib baa loo celiyay (Tampered)"
+        if (isDeviceRevoked) return "Qalabka waa la joojiyay"
+        if (isClockTampered) return "Saacadda dib baa loo celiyay"
 
         val diff = getRemainingTimeMillis()
-        if (diff <= 0L) return "Dhacday (Expired)"
+        if (diff <= 0L) return "Way Dhacday"
 
         val days = diff / (1000 * 60 * 60 * 24)
         val hours = (diff / (1000 * 60 * 60)) % 24
         val minutes = (diff / (1000 * 60)) % 60
+        val seconds = (diff / 1000) % 60
 
         return when {
             days > 0 -> "$days maalmood, $hours saacadood"
             hours > 0 -> "$hours saac, $minutes daqiiqo"
-            else -> "$minutes daqiiqo"
+            minutes > 0 -> "$minutes daqiiqo, $seconds ilbiriqsi"
+            else -> "$seconds ilbiriqsi"
         }
     }
+
+    fun formatExpiryDate(): String {
+        if (subscriptionExpiresAt <= 0L) return "Lama hubo"
+        return try {
+            val sdf = java.text.SimpleDateFormat("dd/MM/yyyy, hh:mm a", java.util.Locale.getDefault())
+            sdf.format(java.util.Date(subscriptionExpiresAt))
+        } catch (e: Exception) {
+            "Lama hubo"
+        }
+    }
+
+    fun getRemainingHours(): Long = getRemainingTimeMillis() / (1000 * 60 * 60)
 
     fun clear() {
         prefs.edit().clear().apply()

@@ -573,10 +573,13 @@ class GeeshForegroundService : Service() {
     }
 
     private fun buildNotification(title: String, text: String): Notification {
+        val prefs = LocalPrefs(this)
+        val remaining = if (prefs.isLicenseActive()) "⏳ ${prefs.formatRemainingTime()}" else "⚠️ Rukhsaddu way dhacday"
+        val fullContent = "$text • $remaining"
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
-            .setContentText(text)
+            .setContentText(fullContent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
