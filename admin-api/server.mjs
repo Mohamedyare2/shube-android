@@ -902,14 +902,187 @@ app.post("/api/geesh/login", async (req, res) => {
       });
     }
 
+    const devRecord = allDevices && allDevices.length > 0 ? allDevices[0] : null;
+
     return res.json({
       access_token: authData.access_token,
       refresh_token: authData.refresh_token,
       user: authData.user,
-      operator: opData[0]
+      operator: opData[0],
+      subscription_expires_at: devRecord ? devRecord.subscription_expires_at : null
     });
   } catch (err) {
     console.error("[geesh-login]", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+// ── Geesh Subscription & 8-Digit Activation Code Endpoints ────────────────────
+
+// 1. Admin generates 8-digit activation code with custom days, hours, minutes
+app.post("/api/devices/:device_id/activation-code", async (req, res) => {
+  const jwt = callerJwt(req);
+  if (!jwt) return res.status(401).json({ error: "Unauthorized" });
+
+  const { device_id } = req.params;
+  const { days = 0, hours = 0, minutes = 0 } = req.body || {};
+
+  const totalMinutes = (parseInt(days) || 0) * 1440 + (parseInt(hours) || 0) * 60 + (parseInt(minutes) || 0);
+  if (totalMinutes <= 0) {
+    return res.status(400).json({ error: "Fadlan geli ugu yaraan 1 daqiiqo ama maalin (Duration required)" });
+  }
+
+  try {
+    const devResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}&select=id,device_name,revoked,status,subscription_expires_at`, { method: "GET" });
+    const devData = await devResp.json();
+    if (!devResp.ok || !devData || devData.length === 0) {
+      return res.status(404).json({ error: "Device not found" });
+    }
+
+    // Generate random 8-digit numeric code
+    const activation_code = Math.floor(10000000 + Math.random() * 90000000).toString();
+
+    const patchResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        activation_code,
+        activation_code_duration_minutes: totalMinutes,
+        updated_at: new Date().toISOString()
+      })
+    });
+
+    if (!patchResp.ok) {
+      const err = await patchResp.json().catch(() => ({}));
+      return res.status(patchResp.status).json({ error: err.message || "Failed to save activation code" });
+    }
+
+    return res.json({
+      success: true,
+      activation_code,
+      duration_minutes: totalMinutes,
+      days: parseInt(days) || 0,
+      hours: parseInt(hours) || 0,
+      minutes: parseInt(minutes) || 0
+    });
+  } catch (err) {
+    console.error("[generate-activation-code]", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+// 2. Geesh App Activates/Renews Subscription using 8-digit code (Requires Internet)
+app.post("/api/geesh/activate", async (req, res) => {
+  const { device_identifier, activation_code } = req.body || {};
+  if (!device_identifier || !activation_code) {
+    return res.status(400).json({ error: "device_identifier and activation_code required" });
+  }
+
+  try {
+    const devResp = await sbFetch(
+      `${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}&select=*`,
+      { method: "GET" }
+    );
+    const devices = await devResp.json();
+    if (!devResp.ok || !devices || devices.length === 0) {
+      return res.status(404).json({ error: "Device-kan lama helin ama waa la tirtiray. La xiriir Admin-ka.", is_deleted: true });
+    }
+
+    const device = devices[0];
+
+    // Check if revoked or disabled
+    if (device.revoked || device.status === 'disabled') {
+      return res.status(403).json({
+        error: "Device-kan waa la joojiyay (Revoked). Lama furi karo ilaa Admin-ku dib u soo celiyo.",
+        is_revoked: true
+      });
+    }
+
+    // Verify 8-digit activation code
+    if (!device.activation_code || device.activation_code.trim() !== activation_code.trim()) {
+      return res.status(400).json({
+        error: "8-da lambar ma saxna ama hore ayaa loo isticmaalay. Fadlan hubi lambarka ama la xiriir Admin-ka."
+      });
+    }
+
+    // Calculate new expiration date (supports rollover if existing subscription hasn't expired yet)
+    const now = new Date();
+    const durationMinutes = Number(device.activation_code_duration_minutes) || 43200; // default 30 days
+    let baseTime = now.getTime();
+
+    if (device.subscription_expires_at) {
+      const existingExp = new Date(device.subscription_expires_at).getTime();
+      if (existingExp > baseTime) {
+        baseTime = existingExp; // rollover remaining unexpired time
+      }
+    }
+
+    const newExpiresAt = new Date(baseTime + durationMinutes * 60 * 1000);
+
+    // Save and clear activation code (single-use)
+    const updateResp = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        subscription_expires_at: newExpiresAt.toISOString(),
+        activation_code: null, // Burn code after single use
+        activated_at: now.toISOString(),
+        status: "online",
+        last_seen: now.toISOString(),
+        revoked: false
+      })
+    });
+
+    if (!updateResp.ok) {
+      return res.status(500).json({ error: "Failed to update device subscription" });
+    }
+
+    return res.json({
+      success: true,
+      subscription_expires_at: newExpiresAt.toISOString(),
+      expires_timestamp: newExpiresAt.getTime(),
+      server_time: now.toISOString(),
+      duration_minutes: durationMinutes
+    });
+  } catch (err) {
+    console.error("[geesh-activate]", err);
+    return res.status(500).json({ error: err.message || "Internal server error" });
+  }
+});
+
+// 3. Geesh App Check License / Heartbeat / Revocation Check (Online ping)
+app.post("/api/geesh/check-license", async (req, res) => {
+  const { device_identifier } = req.body || {};
+  if (!device_identifier) {
+    return res.status(400).json({ error: "device_identifier required" });
+  }
+
+  try {
+    const devResp = await sbFetch(
+      `${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}&select=id,status,revoked,subscription_expires_at`,
+      { method: "GET" }
+    );
+    const devices = await devResp.json();
+    if (!devResp.ok || !devices || devices.length === 0) {
+      return res.status(404).json({ error: "Device-ka waa la tirtiray.", is_deleted: true });
+    }
+
+    const device = devices[0];
+    if (device.revoked || device.status === 'disabled') {
+      return res.status(403).json({
+        error: "Device-kan waa la joojiyay (Revoked).",
+        is_revoked: true,
+        subscription_expires_at: device.subscription_expires_at
+      });
+    }
+
+    return res.json({
+      success: true,
+      subscription_expires_at: device.subscription_expires_at,
+      expires_timestamp: device.subscription_expires_at ? new Date(device.subscription_expires_at).getTime() : null,
+      is_revoked: false,
+      server_time: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("[geesh-check-license]", err);
     return res.status(500).json({ error: err.message || "Internal server error" });
   }
 });

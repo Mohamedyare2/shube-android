@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_1nUAbZA56Rsv0EBNxN8b5JWhvWNX",
+  "orgId": "team_PRHwipwp3hvOkzLumflNGa8U",
+  "projectName": "admin-dashboard",
+  "settings": {
+    "createdAt": 1788472118034,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

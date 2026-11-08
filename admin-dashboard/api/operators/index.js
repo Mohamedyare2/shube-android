@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
   // ── POST /api/operators — create a new operator ───────────────────────────
   if (req.method === 'POST') {
-    let { email, password, full_name, username, phone_number, notes, actor_id, app_type, ussd_template, ussd_reply_template } = req.body || {};
+    let { email, password, full_name, username, phone_number, notes, actor_id, app_type, ussd_template, ussd_reply_template, subscription_days, subscription_hours, subscription_minutes } = req.body || {};
     
     if (app_type === 'shube' || app_type === 'mumin') {
       if (email && !username) {
@@ -43,6 +43,19 @@ export default async function handler(req, res) {
     } else {
       if (!email && username) {
         email = `${username}@geesh.app`;
+      }
+    }
+
+    let subscription_expires_at = null;
+    let activation_code = null;
+    let activation_code_duration_minutes = null;
+
+    if (app_type === 'geesh') {
+      const totalMinutes = (parseInt(subscription_days) || 0) * 1440 + (parseInt(subscription_hours) || 0) * 60 + (parseInt(subscription_minutes) || 0);
+      if (totalMinutes > 0) {
+        activation_code_duration_minutes = totalMinutes;
+        subscription_expires_at = new Date(Date.now() + totalMinutes * 60 * 1000).toISOString();
+        activation_code = Math.floor(10000000 + Math.random() * 90000000).toString();
       }
     }
 
@@ -83,16 +96,22 @@ export default async function handler(req, res) {
       });
 
       // Step 3: Insert operator record
+      const referralCode = username.toLowerCase().replace(/[^a-z0-9]/g, '-');
       const opResp = await sbFetch(`${SUPABASE_URL}/rest/v1/operators`, {
         method: "POST",
         body: JSON.stringify({
           profile_id: userId,
           username,
+          referral_code: referralCode,
+          plain_password: password,
           notes: notes || null,
           created_by: actor_id || adminUser.id,
           app_type: app_type || 'shube',
           ussd_template: ussd_template || undefined,
           ussd_reply_template: ussd_reply_template || undefined,
+          subscription_expires_at: subscription_expires_at || undefined,
+          activation_code: activation_code || undefined,
+          activation_code_duration_minutes: activation_code_duration_minutes || undefined,
         }),
       });
       const opData = await opResp.json();
@@ -111,7 +130,13 @@ export default async function handler(req, res) {
         }),
       }).catch(() => {});
 
-      return jsonResponse(res, 201, { user_id: userId, operator: Array.isArray(opData) ? opData[0] : opData });
+      return jsonResponse(res, 201, {
+        user_id: userId,
+        operator: Array.isArray(opData) ? opData[0] : opData,
+        subscription_expires_at,
+        activation_code,
+        duration_minutes: activation_code_duration_minutes
+      });
     } catch (err) {
       return jsonResponse(res, 500, { error: err.message || "Internal server error" });
     }

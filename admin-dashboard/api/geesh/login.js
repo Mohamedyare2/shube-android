@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
     // ── Step 2: Find Operator record + USSD templates ──────────────────────
     const opResp = await sbFetch(
-      `${SUPABASE_URL}/rest/v1/operators?profile_id=eq.${userId}&select=id,username,ussd_template,ussd_reply_template`
+      `${SUPABASE_URL}/rest/v1/operators?profile_id=eq.${userId}&select=id,username,ussd_template,ussd_reply_template,subscription_expires_at`
     );
     const opData = await opResp.json();
 
@@ -52,7 +52,8 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Operator not found' });
     }
 
-    const operatorId = opData[0].id;
+    const operator = opData[0];
+    const operatorId = operator.id;
 
     // ── Step 3: Check Device Binding (1 account = 1 active device) ─────────
     const devResp = await sbFetch(
@@ -74,8 +75,12 @@ export default async function handler(req, res) {
       `${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}`
     );
     const allDevices = await allDevResp.json();
+    let currentDevice = Array.isArray(allDevices) && allDevices.length > 0 ? allDevices[0] : null;
 
-    if (Array.isArray(allDevices) && allDevices.length > 0) {
+    // Determine initial subscription: device's own, or inherited from operator
+    const effectiveExpiresAt = currentDevice?.subscription_expires_at || operator.subscription_expires_at || null;
+
+    if (currentDevice) {
       await sbFetch(`${SUPABASE_URL}/rest/v1/devices?device_identifier=eq.${device_identifier}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -83,6 +88,7 @@ export default async function handler(req, res) {
           device_name: device_name || 'Geesh Device',
           status: 'online',
           last_seen: new Date().toISOString(),
+          subscription_expires_at: effectiveExpiresAt,
           revoked: false,
         }),
       });
@@ -94,6 +100,7 @@ export default async function handler(req, res) {
           device_identifier,
           device_name: device_name || 'Geesh Device',
           status: 'online',
+          subscription_expires_at: effectiveExpiresAt,
           last_seen: new Date().toISOString(),
         }),
       });
@@ -104,7 +111,8 @@ export default async function handler(req, res) {
       access_token: authData.access_token,
       refresh_token: authData.refresh_token,
       user: authData.user,
-      operator: opData[0],
+      operator: operator,
+      subscription_expires_at: effectiveExpiresAt,
     });
 
   } catch (err) {

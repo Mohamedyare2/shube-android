@@ -31,6 +31,7 @@ export default function ReferralLinkPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingBundles, setSavingBundles] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [stats, setStats] = useState<ReferralStats | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -47,13 +48,23 @@ export default function ReferralLinkPage() {
       // 1. Get operator record
       const { data: op } = await supabase
         .from('operators')
-        .select('id, referral_code, referral_welcome_message, referral_active')
+        .select('id, username, referral_code, referral_welcome_message, referral_active')
         .eq('profile_id', user.id)
         .maybeSingle()
 
       if (op) {
         setOperatorId(op.id)
-        setReferralCode(op.referral_code)
+        let activeCode = op.referral_code
+        if (!activeCode && op.username) {
+          activeCode = op.username.toLowerCase().replace(/[^a-z0-9]/g, '-')
+          // Auto-heal referral_code in operators table
+          supabase
+            .from('operators')
+            .update({ referral_code: activeCode })
+            .eq('id', op.id)
+            .then(() => {})
+        }
+        setReferralCode(activeCode)
         setWelcomeMsg(op.referral_welcome_message || '')
         setReferralActive(op.referral_active ?? true)
 
@@ -195,6 +206,25 @@ export default function ReferralLinkPage() {
     if (!referralUrl) return
     const msg = encodeURIComponent(`📶 Hel Internet Degdeg ah!\n\nGuji linkiga hoose si aad isu diiwaangeliso:\n${referralUrl}`)
     window.open(`https://wa.me/?text=${msg}`, '_blank')
+  }
+
+  async function generateCode() {
+    if (!operatorId) return
+    setGenerating(true)
+    try {
+      const generated = user?.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]/g, '-') || `op-${operatorId.slice(0, 8)}`
+      const { error } = await supabase
+        .from('operators')
+        .update({ referral_code: generated })
+        .eq('id', operatorId)
+      if (error) throw error
+      setReferralCode(generated)
+      toast('Registration link generated successfully!', 'success')
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Failed to generate link', 'error')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   // Check authorization
@@ -364,8 +394,11 @@ export default function ReferralLinkPage() {
             </div>
           </>
         ) : (
-          <div style={{ color: 'var(--text-muted)', padding: '16px 0' }}>
-            No referral code assigned yet. Contact your administrator.
+          <div style={{ color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>
+            <p style={{ margin: '0 0 12px' }}>Wali laguu ma xilsaarin Referral Code gaar ah.</p>
+            <button className="btn btn-primary" onClick={generateCode} disabled={generating}>
+              {generating ? 'Generating...' : '✨ Sameyso Link-gaaga Hadda'}
+            </button>
           </div>
         )}
       </div>

@@ -272,6 +272,25 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                         } else {
                                             prefs.ussdReply = null
                                         }
+
+                                        // Save subscription expiry if provided by server
+                                        if (data.has("subscription_expires_at") && !data.isNull("subscription_expires_at")) {
+                                            val expiresStr = data.getString("subscription_expires_at")
+                                            try {
+                                                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US).apply {
+                                                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                                }
+                                                val expDate = sdf.parse(expiresStr)
+                                                if (expDate != null) {
+                                                    prefs.subscriptionExpiresAt = expDate.time
+                                                    prefs.lastRecordedTimestamp = System.currentTimeMillis()
+                                                    prefs.isClockTampered = false
+                                                    prefs.isDeviceRevoked = false
+                                                }
+                                            } catch (e: Exception) {
+                                                // Ignore parse error
+                                            }
+                                        }
                                         
                                         onLoginSuccess()
                                     },

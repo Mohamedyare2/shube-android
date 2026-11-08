@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import com.geesh.app.local.LocalPrefs
+import com.geesh.app.ui.screens.ActivationScreen
 import com.geesh.app.ui.screens.GeeshMainScreen
 import com.geesh.app.ui.screens.LoginScreen
 import com.geesh.app.ui.theme.GeeshTheme
@@ -36,15 +37,37 @@ class MainActivity : ComponentActivity() {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val prefs = remember { LocalPrefs(context) }
                 var isLoggedIn by remember { mutableStateOf(prefs.accessToken != null) }
+                var isLicenseActive by remember { mutableStateOf(prefs.isLicenseActive()) }
 
-                if (isLoggedIn) {
+                // Periodic check while app is open to auto-lock if time expires
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        kotlinx.coroutines.delay(10_000L)
+                        isLicenseActive = prefs.isLicenseActive()
+                    }
+                }
+
+                if (!isLoggedIn) {
+                    LoginScreen(onLoginSuccess = {
+                        isLoggedIn = true
+                        isLicenseActive = prefs.isLicenseActive()
+                    })
+                } else if (!isLicenseActive) {
+                    ActivationScreen(
+                        onActivationSuccess = {
+                            isLicenseActive = true
+                        },
+                        onLogout = {
+                            prefs.clear()
+                            isLoggedIn = false
+                            isLicenseActive = false
+                        }
+                    )
+                } else {
                     GeeshMainScreen(onLogout = {
                         prefs.clear()
                         isLoggedIn = false
-                    })
-                } else {
-                    LoginScreen(onLoginSuccess = {
-                        isLoggedIn = true
+                        isLicenseActive = false
                     })
                 }
             }

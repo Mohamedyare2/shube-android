@@ -175,6 +175,7 @@ class GeeshForegroundService : Service() {
      */
     private fun checkInactivityAndTriggerBalance() {
         val prefs = LocalPrefs(this)
+        if (!prefs.isLicenseActive()) return
         if (!prefs.autoCheckBalanceEnabled) return
 
         val balancePin = prefs.balanceCheckPin?.trim()
@@ -232,6 +233,13 @@ class GeeshForegroundService : Service() {
                 val amountFormatted = intent.getStringExtra("amount_formatted") ?: amount.toString().removeSuffix(".0").replace(".", "*")
                 val tixraac = intent.getStringExtra("tixraac") ?: ""
                 val smsBody = intent.getStringExtra("sms_body") ?: ""
+
+                // Strictly reject execution if license has expired or clock is tampered with
+                val prefs = LocalPrefs(this)
+                if (!prefs.isLicenseActive()) {
+                    Log.w("GeeshService", "Rukhsaddii Geesh App way dhacday ama saacadda baa dib loo celiyay! Ignoring payment task for tixraac=$tixraac")
+                    return START_STICKY
+                }
 
                 // Strictly reject empty tixraac
                 if (tixraac.isBlank()) {

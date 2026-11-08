@@ -156,6 +156,17 @@ export default function PremiumFeaturesPage() {
         // ZAAD payment details (only set when granting)
         payload.zaad_number = zaadNumber.trim() || null
         payload.zaad_account_name = zaadAccountName.trim() || null
+
+        // Ensure operator has a referral_code assigned
+        if (!targetOperator.referral_code) {
+          const generatedCode = targetOperator.username
+            ? targetOperator.username.toLowerCase().replace(/[^a-z0-9]/g, '-')
+            : `op-${opId.slice(0, 8)}`
+          await supabase
+            .from('operators')
+            .update({ referral_code: generatedCode })
+            .eq('id', opId)
+        }
       } else {
         payload.revoked_at = nowIso
         payload.revoked_by = user.id

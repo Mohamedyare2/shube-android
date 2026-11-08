@@ -91,6 +91,69 @@ class LocalPrefs(context: Context) {
         get() = prefs.getString("base_url", "https://admin.shube.so") ?: "https://admin.shube.so"
         set(value) = prefs.edit().putString("base_url", value).apply()
 
+    /**
+     * Subscription / Offline Licensing & Anti-Clock Tampering
+     */
+    var subscriptionExpiresAt: Long
+        get() = prefs.getLong("subscription_expires_at", 0L)
+        set(value) = prefs.edit().putLong("subscription_expires_at", value).apply()
+
+    var lastRecordedTimestamp: Long
+        get() = prefs.getLong("last_recorded_timestamp", 0L)
+        set(value) = prefs.edit().putLong("last_recorded_timestamp", value).apply()
+
+    var isDeviceRevoked: Boolean
+        get() = prefs.getBoolean("is_device_revoked", false)
+        set(value) = prefs.edit().putBoolean("is_device_revoked", value).apply()
+
+    var isClockTampered: Boolean
+        get() = prefs.getBoolean("is_clock_tampered", false)
+        set(value) = prefs.edit().putBoolean("is_clock_tampered", value).apply()
+
+    fun isLicenseActive(): Boolean {
+        if (isDeviceRevoked) return false
+
+        val now = System.currentTimeMillis()
+        val lastRecorded = lastRecordedTimestamp
+
+        // Anti-tamper check: If clock is rolled back by more than 60 seconds
+        if (lastRecorded > 0L && now < (lastRecorded - 60_000L)) {
+            isClockTampered = true
+            return false
+        }
+
+        // Clock is progressing forward normally
+        if (now > lastRecorded) {
+            lastRecordedTimestamp = now
+        }
+
+        // Must have a valid unexpired subscription
+        return subscriptionExpiresAt > now
+    }
+
+    fun getRemainingTimeMillis(): Long {
+        val now = System.currentTimeMillis()
+        return (subscriptionExpiresAt - now).coerceAtLeast(0L)
+    }
+
+    fun formatRemainingTime(): String {
+        if (isDeviceRevoked) return "Qalabka waa la joojiyay (Revoked)"
+        if (isClockTampered) return "Saacadda dib baa loo celiyay (Tampered)"
+
+        val diff = getRemainingTimeMillis()
+        if (diff <= 0L) return "Dhacday (Expired)"
+
+        val days = diff / (1000 * 60 * 60 * 24)
+        val hours = (diff / (1000 * 60 * 60)) % 24
+        val minutes = (diff / (1000 * 60)) % 60
+
+        return when {
+            days > 0 -> "$days maalmood, $hours saacadood"
+            hours > 0 -> "$hours saac, $minutes daqiiqo"
+            else -> "$minutes daqiiqo"
+        }
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
