@@ -365,34 +365,37 @@ export default function OperatorsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      let res = await fetch(`/api/operators/${op.profile_id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ actor_id: user?.id, username: op.username }),
-      })
-
-      if (!res.ok) {
-        // Fallback for query-param style delete
-        const fallbackRes = await fetch(`/api/operators?profile_id=${op.profile_id}`, {
+      // Strategy 1: Vercel API endpoint (dynamic route [profile_id].js)
+      let deleted = false
+      try {
+        const res1 = await fetch(`/api/operators/${op.profile_id}`, {
           method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
           body: JSON.stringify({ actor_id: user?.id, username: op.username }),
         })
-        if (fallbackRes.ok) {
-          res = fallbackRes
+        if (res1.ok) { deleted = true }
+        else {
+          // Fallback: query-param style (index.js DELETE)
+          const res2 = await fetch(`/api/operators?profile_id=${op.profile_id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+            body: JSON.stringify({ actor_id: user?.id, username: op.username }),
+          })
+          if (res2.ok) deleted = true
         }
+      } catch (_) { /* network error — try RPC */ }
+
+      // Strategy 2: Direct Supabase RPC admin_delete_operator
+      if (!deleted) {
+        const { data: rpcOk, error: rpcErr } = await supabase.rpc('admin_delete_operator', {
+          target_profile_id: op.profile_id
+        })
+        if (rpcErr) throw new Error(rpcErr.message || 'Failed to delete operator')
+        if (!rpcOk) throw new Error('Delete failed — operator may not exist')
+        deleted = true
       }
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }))
-        throw new Error(err.error || 'Failed to delete operator')
-      }
+      if (!deleted) throw new Error('Failed to delete operator')
 
       toast('Operator deleted successfully', 'success')
       load()
