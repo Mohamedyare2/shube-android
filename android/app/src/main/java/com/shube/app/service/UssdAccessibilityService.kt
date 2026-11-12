@@ -235,6 +235,7 @@ class UssdAccessibilityService : AccessibilityService() {
                         }
                         attempts++
                     }
+                    attempts++
                 }
 
                 if (targetNode != null && isTelephonyPackage(targetNode.packageName?.toString())) {
