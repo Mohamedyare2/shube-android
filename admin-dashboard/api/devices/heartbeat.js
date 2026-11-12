@@ -12,6 +12,13 @@ export default async function handler(req, res) {
   if (!device_id) return jsonResponse(res, 400, { error: "device_id required" });
 
   try {
+    // Check if device is revoked or disabled
+    const devRes = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}&select=id,status,revoked`, { method: "GET" });
+    const devs = await devRes.json();
+    if (devs && devs.length > 0 && (devs[0].revoked || devs[0].status === 'disabled')) {
+      return jsonResponse(res, 403, { error: "Device is disabled", is_disabled: true });
+    }
+
     const now = new Date().toISOString();
     const updateBody = { last_seen: now, last_ping_at: now, status: 'online' };
     if (app_version) updateBody.app_version = app_version;

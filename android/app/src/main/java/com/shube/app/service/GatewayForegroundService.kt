@@ -104,7 +104,13 @@ class GatewayForegroundService : Service() {
             val prefs = DevicePreferences.getInstance(this@GatewayForegroundService)
             while (isActive) {
                 prefs.deviceId?.let { id ->
-                    api.sendHeartbeat(id)
+                    val hb = api.sendHeartbeat(id)
+                    if (hb.isDisabled) {
+                        Log.w("GatewayService", "Device or Operator is DISABLED by admin. Stopping service.")
+                        notify("Gateway Disabled", "Qalabka ama Account-ka waa la hakiyay (Disabled).")
+                        stopSelf()
+                        return@launch
+                    }
                 }
                 delay(60_000) // 1 minute
             }
@@ -148,6 +154,14 @@ class GatewayForegroundService : Service() {
         wakeLock?.acquire(180_000L) // 3 mins safety timeout
 
         try {
+            // ── Step 0: Check if device or operator is disabled ──────
+            val isDeviceActive = SupabaseRepository.isDeviceActive(deviceId)
+            if (!isDeviceActive) {
+                Log.w("GatewayService", "Device or Operator is DISABLED/REVOKED. Ignoring transaction.")
+                notify("Gateway Paused", "Qalabka ama Account-ka waa la hakiyay (Disabled).")
+                return
+            }
+
             // ── Step 1: Check if sender is a registered customer ─────
             notify("Looking Up Customer", "Checking if $sender is registered...")
             val customer = SupabaseRepository.getCustomerBySender(sender)

@@ -8,13 +8,37 @@ import kotlinx.coroutines.withContext
 
 /**
  * Provides all Supabase database operations needed by the gateway.
- * Uses the anon key — RLS policies enforce what each user can access.
+ * Uses the service key -- injected at pair time via SupabaseService.initServiceClient().
  */
 object SupabaseRepository {
 
-    // Use service-role client for all DB writes — bypasses RLS which requires authenticated user.
-    // The service key is injected at pair time via SupabaseService.initServiceClient().
     private val client get() = SupabaseService.serviceClient
+
+    // ─────────────────────────────────────────────────────────────
+    // DEVICE & OPERATOR STATUS CHECK
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Checks if the device is active (not revoked and status != 'disabled').
+     * If the operator is disabled, their device is also marked revoked/disabled.
+     */
+    suspend fun isDeviceActive(deviceId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val result = client.postgrest["devices"]
+                .select {
+                    filter {
+                        eq("id", deviceId)
+                    }
+                    limit(1)
+                }
+                .decodeList<DeviceCheck>()
+            val dev = result.firstOrNull() ?: return@withContext false
+            dev.status != "disabled" && !dev.revoked
+        } catch (e: Exception) {
+            Log.e("SupabaseRepo", "isDeviceActive error: ${e.message}", e)
+            true // On network failure, don't abruptly block
+        }
+    }
 
     // ─────────────────────────────────────────────────────────────
     // BUNDLE RULES

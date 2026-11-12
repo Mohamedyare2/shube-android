@@ -23,7 +23,8 @@ data class PairResult(
 
 data class HeartbeatResult(
     val success: Boolean,
-    val error: String? = null
+    val error: String? = null,
+    val isDisabled: Boolean = false
 )
 
 /**
@@ -117,7 +118,11 @@ class ApiService(private val context: Context) {
                 conn.disconnect()
 
                 Log.d("ApiService", "heartbeat $code — battery=$battery% charging=$isCharging network=$network")
-                HeartbeatResult(success = code in 200..299)
+                HeartbeatResult(
+                    success = code in 200..299,
+                    isDisabled = (code == 403),
+                    error = if (code == 403) "Device or Operator is disabled" else null
+                )
             } catch (e: Exception) {
                 Log.w("ApiService", "heartbeat error: ${e.message}")
                 HeartbeatResult(success = false, error = e.message)

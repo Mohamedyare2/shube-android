@@ -283,6 +283,28 @@ export default function OperatorsPage() {
     const newStatus = op.profile.status === 'active' ? 'disabled' : 'active'
     const { error } = await supabase.from('profiles').update({ status: newStatus }).eq('id', op.profile_id)
     if (error) { toast(error.message, 'error'); return }
+
+    // Sidoo kale xidh ama fur dhammaan devices-ka operator-ka
+    try {
+      if (newStatus === 'disabled') {
+        await supabase.from('devices').update({
+          status: 'disabled',
+          revoked: true,
+          revoked_at: new Date().toISOString(),
+          revoked_by: user?.id,
+        }).eq('operator_id', op.id)
+      } else {
+        await supabase.from('devices').update({
+          status: 'offline',
+          revoked: false,
+          revoked_at: null,
+          revoked_by: null,
+        }).eq('operator_id', op.id)
+      }
+    } catch (devErr) {
+      console.error('Failed to update operator devices:', devErr)
+    }
+
     await supabase.from('audit_logs').insert({
       actor_id: user?.id, actor_role: 'admin',
       action: newStatus === 'disabled' ? 'operator_disabled' : 'operator_enabled',
@@ -343,7 +365,7 @@ export default function OperatorsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      const res = await fetch(`/api/operators/${op.profile_id}`, {
+      let res = await fetch(`/api/operators/${op.profile_id}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -351,6 +373,21 @@ export default function OperatorsPage() {
         },
         body: JSON.stringify({ actor_id: user?.id, username: op.username }),
       })
+
+      if (!res.ok) {
+        // Fallback for query-param style delete
+        const fallbackRes = await fetch(`/api/operators?profile_id=${op.profile_id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ actor_id: user?.id, username: op.username }),
+        })
+        if (fallbackRes.ok) {
+          res = fallbackRes
+        }
+      }
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }))

@@ -33,8 +33,18 @@ data class Customer(
 )
 
 /**
+ * Matches the `devices` table status check in Supabase.
+ */
+@Serializable
+data class DeviceCheck(
+    val id: String,
+    val status: String,
+    val revoked: Boolean = false
+)
+
+/**
  * Payload to INSERT into the `transactions` table.
- * Column names MUST match 001_schema.sql exactly — extra fields cause Supabase to reject the INSERT.
+ * Column names MUST match 001_schema.sql exactly -- extra fields cause Supabase to reject the INSERT.
  */
 @Serializable
 data class TransactionInsert(
@@ -48,7 +58,6 @@ data class TransactionInsert(
     @SerialName("sms_body")       val smsBody: String? = null,
     @SerialName("test_mode")      val testMode: Boolean = false,
     val status: String = "processing"
-    // NOTE: customer_id and notes are NOT columns in the transactions table — do NOT add them
 )
 
 /**
@@ -62,5 +71,4 @@ data class TransactionUpdate(
     @SerialName("failure_reason") val failureReason: String? = null,
     @SerialName("result_text")    val resultText: String? = null,
     @SerialName("completed_at")   val completedAt: String? = null
-    // NOTE: "notes" is NOT a column in transactions table
 )

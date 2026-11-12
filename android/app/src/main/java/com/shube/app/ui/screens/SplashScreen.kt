@@ -47,9 +47,19 @@ fun SplashScreen(
         delay(1800)
 
         if (prefs.isPaired && prefs.deviceId != null) {
-            // Already paired — resume heartbeat and go straight to dashboard
-            HeartbeatWorker.schedule(context)
-            onNavigateToDashboard(prefs.deviceId!!)
+            val deviceId = prefs.deviceId!!
+            val isActive = try {
+                com.shube.app.supabase.SupabaseRepository.isDeviceActive(deviceId)
+            } catch (e: Exception) {
+                true
+            }
+            if (!isActive) {
+                prefs.clearPairing()
+                onNavigateToLogin()
+            } else {
+                HeartbeatWorker.schedule(context)
+                onNavigateToDashboard(deviceId)
+            }
         } else {
             onNavigateToLogin()
         }

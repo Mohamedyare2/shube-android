@@ -434,6 +434,13 @@ app.post("/api/devices/heartbeat", async (req, res) => {
   if (!device_id) return res.status(400).json({ error: "device_id required" });
 
   try {
+    // Hubi haddii device-ka la xidhay ama la tirtiray
+    const devCheck = await sbFetch(`${SUPABASE_URL}/rest/v1/devices?id=eq.${device_id}&select=id,status,revoked`, { method: "GET" });
+    const devs = await devCheck.json();
+    if (devs && devs.length > 0 && (devs[0].revoked || devs[0].status === 'disabled')) {
+      return res.status(403).json({ error: "Device is disabled", is_disabled: true });
+    }
+
     // Only include battery_level if it's a valid reading (1-100). 0 and -1 are error sentinels.
     const patch = {
       is_online: true,
