@@ -19,16 +19,25 @@ export default async function handler(req, res) {
     try {
       const { actor_id, username } = req.body || {};
 
-      // Delete from auth.users (cascades to profiles and operators tables)
-      const delResp = await sbFetch(`${SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {
-        method: "DELETE",
+      // 1. Try atomic database RPC (deletes devices, operators, bundle_rules, profiles, auth.users)
+      const rpcResp = await sbFetch(`${SUPABASE_URL}/rest/v1/rpc/admin_delete_operator`, {
+        method: "POST",
+        body: JSON.stringify({ target_profile_id: profile_id }),
       });
+      const rpcData = await rpcResp.json().catch(() => ({}));
 
-      if (!delResp.ok) {
-        const delData = await delResp.json().catch(() => ({}));
-        return jsonResponse(res, delResp.status, {
-          error: delData.message || delData.msg || "Failed to delete user"
+      if (!rpcResp.ok || rpcData?.success === false) {
+        // Fallback: Delete from auth.users directly
+        const delResp = await sbFetch(`${SUPABASE_URL}/auth/v1/admin/users/${profile_id}`, {
+          method: "DELETE",
         });
+
+        if (!delResp.ok && delResp.status !== 404) {
+          const delData = await delResp.json().catch(() => ({}));
+          return jsonResponse(res, delResp.status, {
+            error: delData.message || delData.msg || rpcData?.error || "Failed to delete user"
+          });
+        }
       }
 
       // Audit log (non-fatal)

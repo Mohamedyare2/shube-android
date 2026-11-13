@@ -365,37 +365,55 @@ export default function OperatorsPage() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
 
-      // Strategy 1: Vercel API endpoint (dynamic route [profile_id].js)
       let deleted = false
+      let failureReason = ''
+
+      // Strategy 1: Direct Supabase RPC (fastest, atomic, SECURITY DEFINER)
       try {
-        const res1 = await fetch(`/api/operators/${op.profile_id}`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-          body: JSON.stringify({ actor_id: user?.id, username: op.username }),
+        const { data: rpcRes, error: rpcErr } = await supabase.rpc('admin_delete_operator', {
+          target_profile_id: op.profile_id
         })
-        if (res1.ok) { deleted = true }
-        else {
-          // Fallback: query-param style (index.js DELETE)
-          const res2 = await fetch(`/api/operators?profile_id=${op.profile_id}`, {
+        if (!rpcErr && rpcRes) {
+          const resObj = rpcRes as { success?: boolean; error?: string }
+          if (resObj.success === true) {
+            deleted = true
+          } else if (resObj.error) {
+            failureReason = resObj.error
+          }
+        } else if (rpcErr) {
+          failureReason = rpcErr.message
+        }
+      } catch (err: any) {
+        failureReason = err?.message || ''
+      }
+
+      // Strategy 2: API endpoints fallback (Vercel serverless / local admin API)
+      if (!deleted) {
+        try {
+          const res1 = await fetch(`/api/operators/${op.profile_id}`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
             body: JSON.stringify({ actor_id: user?.id, username: op.username }),
           })
-          if (res2.ok) deleted = true
-        }
-      } catch (_) { /* network error — try RPC */ }
-
-      // Strategy 2: Direct Supabase RPC admin_delete_operator
-      if (!deleted) {
-        const { data: rpcOk, error: rpcErr } = await supabase.rpc('admin_delete_operator', {
-          target_profile_id: op.profile_id
-        })
-        if (rpcErr) throw new Error(rpcErr.message || 'Failed to delete operator')
-        if (!rpcOk) throw new Error('Delete failed — operator may not exist')
-        deleted = true
+          if (res1.ok) {
+            deleted = true
+          } else {
+            const res2 = await fetch(`/api/operators?profile_id=${op.profile_id}`, {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+              body: JSON.stringify({ actor_id: user?.id, username: op.username }),
+            })
+            if (res2.ok) {
+              deleted = true
+            } else {
+              const errBody = await res2.json().catch(() => ({}))
+              if (errBody?.error) failureReason = errBody.error
+            }
+          }
+        } catch (_) { /* network error */ }
       }
 
-      if (!deleted) throw new Error('Failed to delete operator')
+      if (!deleted) throw new Error(failureReason || 'Failed to delete operator')
 
       toast('Operator deleted successfully', 'success')
       load()
