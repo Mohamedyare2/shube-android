@@ -1,7 +1,6 @@
 import React from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-
 import { supabase } from '../lib/supabase'
 
 interface NavItem {
@@ -13,27 +12,28 @@ interface NavItem {
 }
 
 const ADMIN_NAV_ITEMS: NavItem[] = [
-  { section: 'Overview',     path: '/dashboard',        icon: '📊', label: 'Global Dashboard' },
-  { path: '/transactions',   icon: '💳', label: 'All Transactions' },
-  { section: 'Management',   path: '/operators',        icon: '🧑‍💼', label: 'Sarif Operators' },
+  { section: 'Overview',      path: '/dashboard',             icon: '📊', label: 'Global Dashboard' },
+  { path: '/transactions',    icon: '💳', label: 'All Transactions' },
+  { section: 'Management',    path: '/operators?tab=shube',   icon: '📱', label: 'Shube Operators' },
+  { path: '/operators?tab=geesh',                             icon: '💱', label: 'Geesh App Users' },
+  { path: '/operators?tab=mumin',                             icon: '✨', label: "Mu'min App Users" },
+  { path: '/devices',         icon: '📱', label: 'All Devices' },
+  { path: '/customers',       icon: '👥', label: 'Customers' },
+  { path: '/referral-link',   icon: '🔗', label: 'Registration Links' },
   { path: '/premium-features', icon: '⭐', label: 'Premium Features' },
-  { path: '/devices',        icon: '📱', label: 'All Devices' },
-  { path: '/customers',      icon: '👥', label: 'Customers' },
-  { path: '/referral-link',  icon: '🔗', label: 'Registration Link' },
-  { path: '/bundles',        icon: '📦', label: 'Bundle Rules' },
-  { section: 'Configuration',path: '/ussd-config',      icon: '⚙️', label: 'USSD Config' },
-  { path: '/sms-parser',     icon: '📩', label: 'SMS Parser' },
-  { section: 'Reporting',    path: '/reports',          icon: '📈', label: 'Reports' },
-  { path: '/audit-logs',     icon: '📋', label: 'Audit Logs' },
-  { path: '/settings',       icon: '🔧', label: 'Settings' },
-  { section: 'Apps',         path: '/mumin',            icon: '✨', label: "Mu'min App" },
-  { section: 'Downloads',    path: '/download',         icon: '📥', label: 'Downloads' },
+  { path: '/bundles',         icon: '📦', label: 'Bundle Rules' },
+  { section: 'Configuration', path: '/ussd-config',           icon: '⚙️', label: 'USSD Config' },
+  { path: '/sms-parser',      icon: '📩', label: 'SMS Parser' },
+  { section: 'Reporting',     path: '/reports',               icon: '📈', label: 'Reports' },
+  { path: '/audit-logs',      icon: '📋', label: 'Audit Logs' },
+  { path: '/settings',        icon: '🔧', label: 'Settings' },
+  { section: 'Downloads',     path: '/download',              icon: '📥', label: 'Downloads' },
 ]
 
 const OPERATOR_NAV_ITEMS: NavItem[] = [
   { section: 'Overview',      path: '/dashboard',     icon: '📊', label: 'Dashboard' },
   { path: '/transactions',    icon: '💳', label: 'Transactions' },
-  { section: 'Management',   path: '/devices',        icon: '📱', label: 'My Devices' },
+  { section: 'Management',    path: '/devices',        icon: '📱', label: 'My Devices' },
   { path: '/customers',       icon: '👥', label: 'Customers' },
   { path: '/referral-link',   icon: '🔗', label: 'My Registration Link' },
   { path: '/bundles',         icon: '📦', label: 'Bundle Rules' },
@@ -64,15 +64,29 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     }
     if (!user?.id) return
 
-    // Query RLS-safe entitlement
+    // Operator's user.id is their profile_id. Find their operator_id first:
     supabase
-      .from('operator_feature_access')
-      .select('status, expires_at')
-      .eq('feature_key', 'registration_via_link')
+      .from('operators')
+      .select('id')
+      .eq('profile_id', user.id)
       .maybeSingle()
-      .then(({ data }) => {
-        if (data && data.status === 'active') {
-          const valid = !data.expires_at || new Date(data.expires_at).getTime() > Date.now()
+      .then(({ data: op, error: opErr }) => {
+        if (opErr || !op?.id) {
+          setHasReferralAccess(false)
+          return null
+        }
+        return supabase
+          .from('operator_feature_access')
+          .select('status, expires_at')
+          .eq('operator_id', op.id)
+          .eq('feature_key', 'registration_via_link')
+          .maybeSingle()
+      })
+      .then(res => {
+        if (!res) return
+        const fa = res.data
+        if (fa && fa.status === 'active') {
+          const valid = !fa.expires_at || new Date(fa.expires_at).getTime() > Date.now()
           setHasReferralAccess(valid)
         } else {
           setHasReferralAccess(false)
@@ -85,7 +99,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   React.useEffect(() => {
     onClose?.()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
+  }, [location.pathname, location.search])
 
   async function handleSignOut() {
     await signOut()
@@ -100,14 +114,28 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     .toUpperCase() ?? (isAdmin ? 'AD' : 'OP')
 
   const baseItems = isAdmin ? ADMIN_NAV_ITEMS : OPERATOR_NAV_ITEMS
-  // Hide referral link from operators who are not authorized
+
+  // Hide referral link from operators who are not authorized (Admins ALWAYS see it)
   const navItems = baseItems.filter(item => {
-    if (item.path === '/referral-link' && !isAdmin && !hasReferralAccess) {
-      return false
+    if (item.path === '/referral-link') {
+      if (isAdmin) return true
+      return hasReferralAccess
     }
     return true
   })
+
   const roleLabel = isAdmin ? 'Admin' : 'Operator'
+
+  function isItemActive(itemPath: string) {
+    const currentFull = location.pathname + location.search
+    if (itemPath.includes('?')) {
+      return currentFull === itemPath
+    }
+    if (location.pathname === '/operators' && itemPath.startsWith('/operators')) {
+      return location.search === '' && itemPath === '/operators?tab=shube'
+    }
+    return location.pathname === itemPath
+  }
 
   return (
     <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
@@ -125,7 +153,7 @@ export default function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             {item.section && <div className="nav-section-label">{item.section}</div>}
             <NavLink
               to={item.path}
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              className={`nav-item${isItemActive(item.path) ? ' active' : ''}`}
             >
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>

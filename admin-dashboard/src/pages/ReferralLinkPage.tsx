@@ -14,7 +14,15 @@ interface ReferralStats {
 interface BundleSlot {
   slot: number
   bundle_name: string
-  bundle_price: string  // keep as string in form for editing
+  bundle_price: string
+}
+
+interface OperatorSummary {
+  id: string
+  username: string
+  referral_code: string | null
+  referral_welcome_message: string | null
+  referral_active: boolean | null
 }
 
 const EMPTY_BUNDLES: BundleSlot[] = [1, 2, 3, 4, 5].map(slot => ({ slot, bundle_name: '', bundle_price: '' }))
@@ -23,7 +31,11 @@ export default function ReferralLinkPage() {
   const { user, isOperator, isAdmin } = useAuth()
   const { toast } = useToast()
 
+  const [adminOperators, setAdminOperators] = useState<OperatorSummary[]>([])
+  const [selectedOpId, setSelectedOpId] = useState<string | null>(null)
+
   const [operatorId, setOperatorId] = useState<string | null>(null)
+  const [operatorUsername, setOperatorUsername] = useState<string>('')
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [welcomeMsg, setWelcomeMsg] = useState('')
   const [referralActive, setReferralActive] = useState(true)
@@ -41,147 +53,230 @@ export default function ReferralLinkPage() {
   const baseUrl = window.location.origin
   const referralUrl = referralCode ? `${baseUrl}/register/${referralCode}` : null
 
+  // 1. Initial admin operator list load
+  useEffect(() => {
+    if (!isAdmin) return
+    supabase
+      .from('operators')
+      .select('id, username, referral_code, referral_welcome_message, referral_active')
+      .order('username')
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setAdminOperators(data)
+          if (!selectedOpId) {
+            setSelectedOpId(data[0].id)
+          }
+        }
+      })
+  }, [isAdmin])
+
+  // 2. Load operator details
   const load = useCallback(async () => {
     if (!user?.id) return
     setLoading(true)
     try {
-      // 1. Get operator record
-      const { data: op } = await supabase
-        .from('operators')
-        .select('id, username, referral_code, referral_welcome_message, referral_active')
-        .eq('profile_id', user.id)
-        .maybeSingle()
+      let targetOp: OperatorSummary | null = null
 
-      if (op) {
-        setOperatorId(op.id)
-        let activeCode = op.referral_code
-        if (!activeCode && op.username) {
-          activeCode = op.username.toLowerCase().replace(/[^a-z0-9]/g, '-')
-          // Auto-heal referral_code in operators table
+      if (isAdmin) {
+        if (selectedOpId) {
+          const found = adminOperators.find(o => o.id === selectedOpId)
+          if (found) {
+            targetOp = found
+          } else {
+            const { data } = await supabase
+              .from('operators')
+              .select('id, username, referral_code, referral_welcome_message, referral_active')
+              .eq('id', selectedOpId)
+              .maybeSingle()
+            targetOp = data
+          }
+        } else {
+          const { data: firstOp } = await supabase
+            .from('operators')
+            .select('id, username, referral_code, referral_welcome_message, referral_active')
+            .order('username')
+            .limit(1)
+            .maybeSingle()
+          targetOp = firstOp
+          if (firstOp) setSelectedOpId(firstOp.id)
+        }
+      } else {
+        const { data: op } = await supabase
+          .from('operators')
+          .select('id, username, referral_code, referral_welcome_message, referral_active')
+          .eq('profile_id', user.id)
+          .maybeSingle()
+        targetOp = op
+      }
+
+      if (targetOp) {
+        setOperatorId(targetOp.id)
+        setOperatorUsername(targetOp.username)
+        let activeCode = targetOp.referral_code
+        if (!activeCode && targetOp.username) {
+          activeCode = targetOp.username.toLowerCase().replace(/[^a-z0-9]/g, '-')
           supabase
             .from('operators')
             .update({ referral_code: activeCode })
-            .eq('id', op.id)
+            .eq('id', targetOp.id)
             .then(() => {})
         }
         setReferralCode(activeCode)
-        setWelcomeMsg(op.referral_welcome_message || '')
-        setReferralActive(op.referral_active ?? true)
+        setWelcomeMsg(targetOp.referral_welcome_message || '')
+        setReferralActive(targetOp.referral_active ?? true)
 
-        // 2. Query feature access entitlement
+        // Query feature access entitlement
         try {
           const { data: faData } = await supabase
             .from('operator_feature_access')
             .select('*')
-            .eq('operator_id', op.id)
+            .eq('operator_id', targetOp.id)
             .eq('feature_key', 'registration_via_link')
             .maybeSingle()
 
           if (faData) {
             setFeatureAccess(faData)
+          } else if (isAdmin) {
+            // Admin automatically granted view
+            setFeatureAccess({
+              id: 'admin',
+              operator_id: targetOp.id,
+              feature_key: 'registration_via_link',
+              status: 'active',
+              granted_at: new Date().toISOString(),
+              expires_at: null,
+              payment_reference: null,
+              granted_by: user.id,
+              notes: 'Admin access'
+            } as OperatorFeatureAccess)
+          } else {
+            setFeatureAccess(null)
           }
         } catch (faErr) {
           console.warn('Could not load operator_feature_access:', faErr)
         }
 
-        // 3. Load bundle slots
+        // Load bundle slots
         try {
           const { data: bundleData } = await supabase
             .from('operator_bundles')
             .select('slot, bundle_name, bundle_price')
-            .eq('operator_id', op.id)
+            .eq('operator_id', targetOp.id)
             .order('slot', { ascending: true })
 
           if (bundleData && bundleData.length > 0) {
-            // Merge fetched data into 5-slot array
             const merged: BundleSlot[] = [1, 2, 3, 4, 5].map(slot => {
               const found = bundleData.find(b => b.slot === slot)
               return {
                 slot,
                 bundle_name: found?.bundle_name || '',
-                bundle_price: found?.bundle_price !== null && found?.bundle_price !== undefined
-                  ? String(found.bundle_price)
-                  : '',
+                bundle_price: found?.bundle_price != null ? String(found.bundle_price) : '',
               }
             })
             setBundles(merged)
+          } else {
+            setBundles(EMPTY_BUNDLES)
           }
         } catch (bErr) {
           console.warn('Could not load operator_bundles:', bErr)
+          setBundles(EMPTY_BUNDLES)
         }
 
-        // 4. Load stats
+        // Load referral stats
         try {
-          const [visitsRes, customersRes] = await Promise.all([
-            supabase.from('referral_visits').select('id, converted', { count: 'exact' }).eq('operator_id', op.id),
-            supabase.from('customers').select('id, registration_source', { count: 'exact' }).eq('created_by', user.id),
-          ])
+          const { count: visitCount } = await supabase
+            .from('referral_visits')
+            .select('id', { count: 'exact', head: true })
+            .eq('operator_id', targetOp.id)
 
-          const visits = visitsRes.data || []
-          const customers = customersRes.data || []
+          const { count: allCustCount } = await supabase
+            .from('customers')
+            .select('id', { count: 'exact', head: true })
+            .eq('referred_by_operator_id', targetOp.id)
+
+          const { count: refCustCount } = await supabase
+            .from('customers')
+            .select('id', { count: 'exact', head: true })
+            .eq('referred_by_operator_id', targetOp.id)
+            .eq('registration_source', 'referral_link')
+
           setStats({
-            total_visits: visits.length,
-            total_customers: customers.length,
-            referral_customers: customers.filter(c => c.registration_source === 'referral_link').length,
+            total_visits: visitCount || 0,
+            total_customers: allCustCount || 0,
+            referral_customers: refCustCount || 0,
           })
-        } catch (_) {}
+        } catch (stErr) {
+          console.warn('Could not load referral stats:', stErr)
+        }
       }
+    } catch (err: unknown) {
+      console.error('Error loading referral link data:', err)
+      toast(err instanceof Error ? err.message : 'Failed to load referral data', 'error')
     } finally {
       setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, isAdmin, selectedOpId, adminOperators])
 
   useEffect(() => { load() }, [load])
 
-  async function handleSave() {
+  async function saveConfig() {
     if (!operatorId) return
     setSaving(true)
     try {
       const { error } = await supabase
         .from('operators')
-        .update({ referral_welcome_message: welcomeMsg || null, referral_active: referralActive })
+        .update({
+          referral_welcome_message: welcomeMsg || null,
+          referral_active: referralActive,
+        })
         .eq('id', operatorId)
+
       if (error) throw error
-      toast('Settings saved!', 'success')
-      load()
+      toast('Settings saved successfully', 'success')
     } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : 'Save failed', 'error')
+      toast(err instanceof Error ? err.message : 'Failed to save', 'error')
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleSaveBundles() {
+  async function saveBundles() {
     if (!operatorId) return
-
-    // Validate prices
-    for (const b of bundles) {
-      if (b.bundle_price !== '') {
-        const price = parseFloat(b.bundle_price)
-        if (isNaN(price) || price < 0) {
-          toast(`Bundle ${b.slot}: Price must be a valid non-negative number`, 'error')
-          return
-        }
-      }
-    }
-
     setSavingBundles(true)
     try {
-      // Upsert all 5 slots
-      const upsertData = bundles.map(b => ({
-        operator_id: operatorId,
-        slot: b.slot,
-        bundle_name: b.bundle_name.trim() || null,
-        bundle_price: b.bundle_price !== '' ? parseFloat(b.bundle_price) : null,
-        updated_at: new Date().toISOString(),
-      }))
+      const upserts = bundles
+        .filter(b => b.bundle_name.trim() !== '')
+        .map(b => ({
+          operator_id: operatorId,
+          slot: b.slot,
+          bundle_name: b.bundle_name.trim(),
+          bundle_price: b.bundle_price.trim() !== '' ? parseFloat(b.bundle_price) : null,
+          active: true,
+          updated_at: new Date().toISOString(),
+        }))
 
-      const { error } = await supabase
-        .from('operator_bundles')
-        .upsert(upsertData, { onConflict: 'operator_id,slot' })
+      const activeSlots = upserts.map(u => u.slot)
+      if (activeSlots.length > 0) {
+        await supabase
+          .from('operator_bundles')
+          .delete()
+          .eq('operator_id', operatorId)
+          .not('slot', 'in', `(${activeSlots.join(',')})`)
+      } else {
+        await supabase
+          .from('operator_bundles')
+          .delete()
+          .eq('operator_id', operatorId)
+      }
 
-      if (error) throw error
-      toast('Bundles saved successfully!', 'success')
+      if (upserts.length > 0) {
+        const { error } = await supabase
+          .from('operator_bundles')
+          .upsert(upserts, { onConflict: 'operator_id,slot' })
+        if (error) throw error
+      }
+
+      toast('Bundle settings saved!', 'success')
       load()
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Failed to save bundles', 'error')
@@ -190,13 +285,13 @@ export default function ReferralLinkPage() {
     }
   }
 
-  function updateBundle(slot: number, field: 'bundle_name' | 'bundle_price', value: string) {
-    setBundles(prev => prev.map(b => b.slot === slot ? { ...b, [field]: value } : b))
+  function updateBundleField(slot: number, field: 'bundle_name' | 'bundle_price', val: string) {
+    setBundles(prev => prev.map(b => b.slot === slot ? { ...b, [field]: val } : b))
   }
 
-  async function copyLink() {
+  function copyLink() {
     if (!referralUrl) return
-    await navigator.clipboard.writeText(referralUrl)
+    navigator.clipboard.writeText(referralUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
     toast('Link copied!', 'success')
@@ -212,7 +307,8 @@ export default function ReferralLinkPage() {
     if (!operatorId) return
     setGenerating(true)
     try {
-      const generated = user?.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]/g, '-') || `op-${operatorId.slice(0, 8)}`
+      const baseName = operatorUsername || user?.email?.split('@')[0] || `op-${operatorId.slice(0, 8)}`
+      const generated = baseName.toLowerCase().replace(/[^a-z0-9]/g, '-')
       const { error } = await supabase
         .from('operators')
         .update({ referral_code: generated })
@@ -220,6 +316,7 @@ export default function ReferralLinkPage() {
       if (error) throw error
       setReferralCode(generated)
       toast('Registration link generated successfully!', 'success')
+      load()
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Failed to generate link', 'error')
     } finally {
@@ -240,7 +337,7 @@ export default function ReferralLinkPage() {
         <div className="empty-state">
           <div className="empty-icon">🔒</div>
           <div className="empty-title">Access Denied</div>
-          <div className="empty-desc">This page is only available for operators.</div>
+          <div className="empty-desc">This page is only available for operators and admins.</div>
         </div>
       </div>
     )
@@ -259,7 +356,7 @@ export default function ReferralLinkPage() {
     )
   }
 
-  // ── Unauthorized State ────────────────────────────────────────────
+  // Unauthorized State (for Operators without feature)
   if (!isAuthorized) {
     const status: FeatureAccessStatus = featureAccess?.status || 'inactive'
     const isExpired = status === 'active' && featureAccess?.expires_at && new Date(featureAccess.expires_at).getTime() <= Date.now()
@@ -286,47 +383,54 @@ export default function ReferralLinkPage() {
           }}>
             🔒
           </div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12 }}>
-            Adeeggan waa Premium (Paid Feature)
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 8 }}>
+            Premium Feature: Macmiil Is-Diiwaangeliye (Self-Registration)
           </h2>
-          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.95rem', marginBottom: 24 }}>
-            Feature-ka <strong>Registration via Link</strong> wuxuu kuu oggolaanayaa inaad hesho link gaar ah oo aad ku wadaagto WhatsApp, TikTok, ama Facebook.
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6, maxWidth: 520, margin: '0 auto 20px' }}>
+            Awood u yeelo in macaamiishaadu ay si toos ah isku diiwaangeliyaan iyaga oo isticmaalaya link gaar kuu ah oo aad ku wadaagto WhatsApp ama baraha bulshada.
           </p>
 
-          <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: 12, padding: '16px 20px', textAlign: 'left', marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>Xaaladda Akoonkaaga:</span>
-              <span style={{ background: effStatus === 'suspended' ? '#ef4444' : effStatus === 'expired' ? '#f59e0b' : 'var(--bg-page)', color: effStatus === 'inactive' ? 'var(--text-muted)' : '#fff', padding: '2px 10px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 700 }}>
-                {effStatus === 'suspended' ? 'SUSPENDED' : effStatus === 'expired' ? 'EXPIRED' : 'NOT ACTIVATED'}
-              </span>
-            </div>
-            {effStatus === 'expired' && featureAccess?.expires_at && (
-              <p style={{ fontSize: '0.8rem', color: '#ef4444', margin: '4px 0 0' }}>
-                Waqtigii adeeggaagu wuxuu dhacay {formatDate(featureAccess.expires_at)}. Fadlan cusboonaysii.
-              </p>
-            )}
-            {effStatus === 'suspended' && (
-              <p style={{ fontSize: '0.8rem', color: '#ef4444', margin: '4px 0 0' }}>
-                Adeeggaaga si ku-meel-gaar ah ayaa loo hakiyay. Sabab: {featureAccess?.notes || 'Contact Admin'}
-              </p>
-            )}
-            {effStatus === 'inactive' && (
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-                Adeeggan wali laguma furin akoonkaaga. Fadlan la xiriir Super Admin-ka si laguugu hawlgeliyo.
-              </p>
-            )}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 14px', borderRadius: 99, fontSize: '0.85rem', fontWeight: 600,
+            background: effStatus === 'expired' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(234, 179, 8, 0.12)',
+            color: effStatus === 'expired' ? '#ef4444' : '#eab308',
+            marginBottom: 24,
+          }}>
+            <span>●</span>
+            <span>Xaaladda: {effStatus === 'expired' ? 'Waqtigu wuu dhacay' : effStatus === 'suspended' ? 'Waa la hakiyay' : 'Wali laguma darin'}</span>
+          </div>
+
+          <div style={{
+            background: 'var(--bg-secondary)', borderRadius: 12, padding: 20, textAlign: 'left',
+            marginBottom: 24, fontSize: '0.9rem',
+          }}>
+            <strong style={{ display: 'block', marginBottom: 8 }}>Faa'iidooyinka Feature-kan:</strong>
+            <ul style={{ margin: 0, paddingLeft: 20, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+              <li>Link gaar ah oo magacaaga wata: <code>{baseUrl}/register/magacaaga</code></li>
+              <li>Macaamiishu waxay dooran karaan xidhmooyinka internetka ee aad u diyaarisay</li>
+              <li>Lacag bixinta tooska ah ee ZAAD adiga oo aan gacanta waxba ku gelin</li>
+              <li>Xisaab xidhkoodu si toos ah ayuu ugu dhacayaa Gateway-gaaga</li>
+            </ul>
           </div>
 
           <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 20 }}>
-            <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>
-              Sida Loo Furto / Contact Admin:
-            </h4>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <a href="https://wa.me/252634284015?text=Asc%20Super%20Admin,%20waxaan%20rabaa%20in%20la%20ii%20furo%20Registration%20via%20Link" target="_blank" rel="noreferrer" className="btn btn-primary" style={{ background: '#25d366', borderColor: '#25d366' }}>
-                💬 Kala Xiriir WhatsApp
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+              Si laguu furo feature-kan, fadlan la xidhiidh Maamulka (Admin):
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a
+                href="https://wa.me/252634284015?text=Asc%20Admin%2C%20waxaan%20doonayaa%20in%20la%20ii%20furo%20Registration%20via%20Link%20feature."
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-primary"
+                style={{ background: '#25D366', borderColor: '#25D366' }}
+              >
+                💬 Kala Xidhiidh WhatsApp (+252 63 4284015)
               </a>
-              <a href="tel:+2520634284015" className="btn btn-secondary">📞 063 4284015</a>
-              <a href="tel:+2520657575175" className="btn btn-secondary">📞 0657575175</a>
+              <a href="tel:+252634284015" className="btn btn-secondary">
+                📞 Wac Admin
+              </a>
             </div>
           </div>
         </div>
@@ -334,170 +438,203 @@ export default function ReferralLinkPage() {
     )
   }
 
-  // ── Authorized State ─────────────────────────────────────────────
   return (
     <div className="page-container">
-      <div className="page-header">
+      {/* Page Header */}
+      <div className="page-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '1.5rem' }}>⭐</span>
-            <h1 className="page-title">My Registration Link</h1>
+            <span style={{ fontSize: '1.5rem' }}>🔗</span>
+            <h1 className="page-title">{isAdmin ? 'Registration Links (Macaamiisha)' : 'Registration Link-gayga'}</h1>
           </div>
-          <p className="page-subtitle">Share your unique link so customers can register themselves</p>
+          <p className="page-subtitle">
+            {isAdmin ? 'Xakamee oo arag linkiyada diiwaangelinta macaamiisha ee operator-kasta' : 'Link-ga gaarka ah ee macaamiishaadu isku diiwaangeliyaan'}
+          </p>
         </div>
       </div>
 
-      {/* Stats */}
-      {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 24 }}>
-          {[
-            { label: 'Total Customers', value: stats.total_customers, icon: '👥' },
-            { label: 'Via Link', value: stats.referral_customers, icon: '🔗' },
-            { label: 'Manual', value: stats.total_customers - stats.referral_customers, icon: '✍️' },
-          ].map(s => (
-            <div key={s.label} className="card" style={{ padding: 20, textAlign: 'center', marginBottom: 0 }}>
-              <div style={{ fontSize: 28 }}>{s.icon}</div>
-              <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: '4px 0' }}>{s.value}</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.label}</div>
-            </div>
-          ))}
+      {/* Admin Operator Switcher */}
+      {isAdmin && adminOperators.length > 0 && (
+        <div className="card" style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-3) var(--space-4)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>👤 Dooro Operator:</span>
+            <select
+              className="form-input"
+              value={selectedOpId || ''}
+              onChange={e => setSelectedOpId(e.target.value)}
+              style={{ maxWidth: 360 }}
+            >
+              {adminOperators.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.username} {o.referral_code ? `(${o.referral_code})` : '— (No link yet)'}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
-      {/* Link section */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Your Unique Registration Link</h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span className="badge badge-success">PREMIUM ACTIVE</span>
-            <span className={`badge ${referralActive ? 'badge-success' : 'badge-danger'}`}>
-              {referralActive ? 'LINK ACCEPTING' : 'LINK PAUSED'}
-            </span>
-          </div>
+      {/* ── Link Card ─────────────────────────────────────────── */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+        <div className="card-header">
+          <div className="card-title">🔗 Link-ga Diiwaangelinta {operatorUsername ? `(${operatorUsername})` : ''}</div>
         </div>
 
-        {referralUrl ? (
+        {referralCode ? (
           <>
-            <div style={{ background: 'var(--bg-secondary)', border: '1.5px solid var(--border-color)', borderRadius: 10, padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', color: 'var(--text-primary)', wordBreak: 'break-all', marginBottom: 14 }}>
-              🔗 {referralUrl}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+              padding: 'var(--space-3) var(--space-4)',
+              background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)', marginBottom: 'var(--space-3)',
+              flexWrap: 'wrap',
+            }}>
+              <code style={{
+                flex: 1, minWidth: 200, fontSize: '0.95rem',
+                color: 'var(--brand-primary)', wordBreak: 'break-all',
+              }}>
+                {referralUrl}
+              </code>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <button className="btn btn-primary btn-sm" onClick={copyLink}>
+                  {copied ? '✅ Copied!' : '📋 Copy Link'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{ background: '#25D366', color: '#fff', border: 'none' }}
+                  onClick={shareWhatsApp}
+                >
+                  💬 WhatsApp
+                </button>
+                <a
+                  href={referralUrl || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary btn-sm"
+                >
+                  ↗ Test Link
+                </a>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" onClick={copyLink}>
-                {copied ? '✅ Copied!' : '📋 Copy Link'}
-              </button>
-              <button className="btn btn-secondary" style={{ background: '#25d366', color: 'white', border: 'none' }} onClick={shareWhatsApp}>
-                📤 Share on WhatsApp
-              </button>
-              <button className="btn btn-secondary" onClick={() => window.open(referralUrl, '_blank')}>
-                👁️ Preview
-              </button>
+
+            <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <span>Code: <strong style={{ color: 'var(--text-primary)' }}>{referralCode}</strong></span>
+              <span>Status: <strong style={{ color: referralActive ? 'var(--brand-success)' : 'var(--brand-danger)' }}>{referralActive ? 'Active' : 'Disabled'}</strong></span>
+              {featureAccess?.expires_at && (
+                <span>Wuxuu dhacayaa: <strong style={{ color: 'var(--text-primary)' }}>{formatDate(featureAccess.expires_at)}</strong></span>
+              )}
             </div>
           </>
         ) : (
           <div style={{ color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>
             <p style={{ margin: '0 0 12px' }}>Wali laguu ma xilsaarin Referral Code gaar ah.</p>
             <button className="btn btn-primary" onClick={generateCode} disabled={generating}>
-              {generating ? 'Generating...' : '✨ Sameyso Link-gaaga Hadda'}
+              {generating ? 'Generating...' : '✨ Samee Link Hadda'}
             </button>
           </div>
         )}
       </div>
 
-      {/* ── My Data Bundles ─────────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontSize: '1.3rem' }}>📦</span>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>My Data Bundles</h2>
+      {/* ── Stats Card ────────────────────────────────────────── */}
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
+          <div className="card" style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--brand-primary)' }}>{stats.total_visits}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Dadka Soo Booqday Link-ga</div>
+          </div>
+          <div className="card" style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--brand-success)' }}>{stats.referral_customers}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Macaamiisha Ku Diiwaangashay</div>
+          </div>
+          <div className="card" style={{ padding: 'var(--space-3) var(--space-4)', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700 }}>
+              {stats.total_visits > 0 ? `${((stats.referral_customers / stats.total_visits) * 100).toFixed(1)}%` : '0%'}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Heerka Is-Diiwaangelinta (Conversion)</div>
+          </div>
         </div>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 20 }}>
-          Configure up to 5 bundles. These will be shown to customers on your registration page.
-        </p>
+      )}
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-color)', width: 50 }}>#</th>
-                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-color)' }}>Bundle Name</th>
-                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-color)', width: 160 }}>Price (SL)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bundles.map(b => (
-                <tr key={b.slot}>
-                  <td style={{ padding: '8px 10px', color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 600 }}>{b.slot}</td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <input
-                      className="form-input"
-                      style={{ margin: 0, fontSize: '0.9rem' }}
-                      placeholder={`Bundle ${b.slot} name (e.g. 1GB Daily)`}
-                      value={b.bundle_name}
-                      onChange={e => updateBundle(b.slot, 'bundle_name', e.target.value)}
-                    />
-                  </td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <input
-                      className="form-input"
-                      style={{ margin: 0, fontSize: '0.9rem' }}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={b.bundle_price}
-                      onChange={e => updateBundle(b.slot, 'bundle_price', e.target.value)}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* ── Welcome Message & Active Toggle ───────────────────── */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)' }}>
+        <div className="card-header">
+          <div className="card-title">⚙️ Habaynta Fariinta & Xaaladda</div>
         </div>
-
-        <div style={{ marginTop: 16 }}>
-          <button className="btn btn-primary" onClick={handleSaveBundles} disabled={savingBundles}>
-            {savingBundles ? 'Saving Bundles...' : '💾 Save Bundles'}
-          </button>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginLeft: 12 }}>
-            Leave rows blank to hide them from your registration page.
-          </span>
-        </div>
-      </div>
-
-      {/* Settings */}
-      <div className="card">
-        <h2 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>Customize Your Page</h2>
-
-        <div className="form-group">
-          <label className="form-label">Welcome Message (optional)</label>
-          <textarea
+        <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
+          <label className="form-label">Fariinta Soo Dhaweynta (Welcome Message)</label>
+          <input
             className="form-input"
-            rows={3}
-            placeholder="Enter a custom message to show on your registration page..."
             value={welcomeMsg}
             onChange={e => setWelcomeMsg(e.target.value)}
-            style={{ resize: 'vertical' }}
+            placeholder="Tusaale: Kusoo dhawow Adeegga Xawaaraha Sare ee Internetka!"
           />
-          <span className="form-hint">Leave blank to use the default service description</span>
+          <span className="form-hint">Fariintan waxay u muuqanaysaa macmiilka marka uu link-ga furo.</span>
         </div>
 
-        <div className="form-group">
+        <div className="form-group" style={{ marginBottom: 'var(--space-3)' }}>
           <label className="toggle-wrapper">
-            <div
-              className={`toggle-track${referralActive ? ' on' : ''}`}
-              onClick={() => setReferralActive(a => !a)}
-            >
+            <div className={`toggle-track${referralActive ? ' on' : ''}`} onClick={() => setReferralActive(a => !a)}>
               <div className="toggle-thumb" />
             </div>
-            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              Registration link active (allow visitors to register via this link)
-            </span>
+            <span style={{ fontSize: '0.875rem' }}>Link-gu wuu shaqaynayaa (Active)</span>
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Settings'}
+        <button className="btn btn-primary" onClick={saveConfig} disabled={saving}>
+          {saving ? 'Saving...' : '💾 Keydi Fariinta'}
+        </button>
+      </div>
+
+      {/* ── Bundle Slots Configuration ────────────────────────── */}
+      <div className="card">
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div className="card-title">📦 Xidhmooyinka Internetka (Bundles)</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Macaamiishaadu waxay dooran karaan xidhmooyinkan marka ay is diiwaangelinayaan.
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={saveBundles} disabled={savingBundles}>
+            {savingBundles ? 'Saving...' : '💾 Keydi Xidhmooyinka'}
           </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {bundles.map(b => (
+            <div key={b.slot} style={{
+              display: 'flex', gap: 'var(--space-3)', alignItems: 'center',
+              padding: 'var(--space-2) var(--space-3)',
+              background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)',
+              flexWrap: 'wrap',
+            }}>
+              <span style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: 'var(--brand-primary)', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.8rem', fontWeight: 700,
+              }}>
+                {b.slot}
+              </span>
+              <input
+                className="form-input"
+                style={{ flex: 2, minWidth: 160 }}
+                value={b.bundle_name}
+                onChange={e => updateBundleField(b.slot, 'bundle_name', e.target.value)}
+                placeholder={`Xidhmada ${b.slot} (Tusaale: 1 GB - Maalin)`}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 120 }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="form-input"
+                  value={b.bundle_price}
+                  onChange={e => updateBundleField(b.slot, 'bundle_price', e.target.value)}
+                  placeholder="0.50"
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

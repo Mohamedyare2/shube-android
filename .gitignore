@@ -24,3 +24,8 @@ admin-api/.env
 admin-api/venv/
 admin-api/__pycache__/
 admin-api/*.pyc
+
+# Vercel artifacts
+.vercel/
+**/.vercel/
+

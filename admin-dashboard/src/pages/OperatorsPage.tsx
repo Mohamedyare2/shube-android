@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Operator, Profile } from '../types/database'
 import { formatDate, profileStatusClass } from '../lib/utils'
@@ -25,7 +26,23 @@ export default function OperatorsPage() {
   const [saving, setSaving] = useState(false)
   const [showResetModal, setShowResetModal] = useState<OperatorWithProfile | null>(null)
   const [newPassword, setNewPassword] = useState('')
-  const [activeTab, setActiveTab] = useState<AppTab>('shube')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as AppTab | null
+  const [activeTab, setActiveTab] = useState<AppTab>(
+    tabParam === 'geesh' || tabParam === 'mumin' ? tabParam : 'shube'
+  )
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as AppTab | null
+    if (t === 'shube' || t === 'geesh' || t === 'mumin') {
+      setActiveTab(t)
+    }
+  }, [searchParams])
+
+  function switchTab(t: AppTab) {
+    setActiveTab(t)
+    setSearchParams({ tab: t })
+  }
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({})
   const [showFormPassword, setShowFormPassword] = useState(false)
   const [showResetPassword, setShowResetPassword] = useState(false)
@@ -458,7 +475,7 @@ export default function OperatorsPage() {
       {/* ── Tab Switcher ─────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 'var(--space-4)', borderBottom: '2px solid var(--border-subtle)', flexWrap: 'wrap' }}>
         <button
-          onClick={() => setActiveTab('shube')}
+          onClick={() => switchTab('shube')}
           style={{
             padding: 'var(--space-3) var(--space-5)',
             background: 'none',
@@ -487,7 +504,7 @@ export default function OperatorsPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('geesh')}
+          onClick={() => switchTab('geesh')}
           style={{
             padding: 'var(--space-3) var(--space-5)',
             background: 'none',
@@ -516,7 +533,7 @@ export default function OperatorsPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('mumin')}
+          onClick={() => switchTab('mumin')}
           style={{
             padding: 'var(--space-3) var(--space-5)',
             background: 'none',
