@@ -17,8 +17,11 @@ class SmsParser {
     
     // Matches: "SLSH1,500" or "1,500 SLS" or "SLSH 1,500"
     private val amountPattern = Pattern.compile("(?:SLSH\\s*|SLS\\s*)(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)|(?:(\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?)\\s*SLS)", Pattern.CASE_INSENSITIVE)
-    // Matches number in parentheses: (634284015) or after "from "
-    private val senderPattern = Pattern.compile("(?:\\((\\d{7,10})\\)|from\\s+(\\d{7,10}))", Pattern.CASE_INSENSITIVE)
+    // Matches number in parentheses: (634284015) or after "from ", "ka", or "ka heshay"
+    private val senderPattern = Pattern.compile(
+        """(?:\(\s*(\d{7,12})\s*\)|from\s+(\d{7,12})|ka\s+(?:heshay\s+)?(\d{7,12})|heshay\s+(\d{7,12}))""",
+        Pattern.CASE_INSENSITIVE
+    )
     private val txIdPattern = Pattern.compile("Tix[:\\s]*([A-Za-z0-9]+)|Ref(?:[:\\s]+)?([A-Za-z0-9]+)", Pattern.CASE_INSENSITIVE)
 
     fun parse(messageBody: String, sender: String): ParsedSms? {
@@ -54,12 +57,21 @@ class SmsParser {
         val currency = amountMatcher.group(2)?.uppercase() ?: "SLS"
 
         val senderMatcher = senderPattern.matcher(messageBody)
-        val extractedSender = if (senderMatcher.find()) {
-            // group(1) = parentheses match e.g. (634284015), group(2) = "from" match
-            senderMatcher.group(1) ?: senderMatcher.group(2)
+        val rawSender = if (senderMatcher.find()) {
+            senderMatcher.group(1) ?: senderMatcher.group(2) ?: senderMatcher.group(3) ?: senderMatcher.group(4)
         } else {
             // Fallback to the actual SMS sender if not found in body
             sender
+        }
+
+        // Clean and normalize sender number to standard 9-digit format (63XXXXXXX)
+        val cleanSender = rawSender?.replace(Regex("""\D"""), "")?.let { raw ->
+            when {
+                raw.startsWith("252") && raw.length == 12 -> raw.substring(3)
+                raw.startsWith("0") && raw.length == 10 -> raw.substring(1)
+                raw.length == 7 -> "63$raw" // Telesom local 7-digit e.g. 4284015 -> 634284015
+                else -> raw
+            }
         }
 
         val txIdMatcher = txIdPattern.matcher(messageBody)
@@ -72,7 +84,7 @@ class SmsParser {
         return ParsedSms(
             amountSls = amount,
             currency = currency,
-            senderNumber = extractedSender,
+            senderNumber = cleanSender,
             transactionId = transactionId
         )
     }

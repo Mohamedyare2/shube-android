@@ -42,7 +42,7 @@ class GatewayForegroundService : Service() {
 
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "shube_gateway_channel"
-        private const val USSD_DIALOG_TIMEOUT_MS = 45_000L
+        private const val USSD_DIALOG_TIMEOUT_MS = 90_000L // 1.5 minutes (90s)
     }
 
     private var heartbeatJob: kotlinx.coroutines.Job? = null
@@ -164,7 +164,7 @@ class GatewayForegroundService : Service() {
 
             // ── Step 1: Check if sender is a registered customer ─────
             notify("Looking Up Customer", "Checking if $sender is registered...")
-            val customer = SupabaseRepository.getCustomerBySender(sender)
+            val customer = SupabaseRepository.getCustomerBySender(sender, profileId)
             val somtelNumber = customer?.somtelNumber
             if (somtelNumber == null) {
                 Log.w("GatewayService", "Unregistered sender $sender. Ignoring SMS.")

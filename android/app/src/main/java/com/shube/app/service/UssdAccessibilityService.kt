@@ -141,6 +141,15 @@ class UssdAccessibilityService : AccessibilityService() {
                    lower.contains("transsion") ||       // Transsion OS telecom components
                    lower.contains("contacts") ||        // MTK / AOSP dialer
                    lower.contains("stk") ||             // SIM Toolkit
+                   lower.contains("coloros") ||         // Oppo / Realme
+                   lower.contains("oplus") ||           // OnePlus / Oppo
+                   lower.contains("vivo") ||            // Vivo / iQOO
+                   lower.contains("bbk") ||             // BBK Electronics (Vivo/Oppo)
+                   lower.contains("miui") ||            // Xiaomi / Redmi
+                   lower.contains("huawei") ||          // Huawei
+                   lower.contains("honor") ||           // Honor
+                   lower.contains("samsung") ||         // Samsung
+                   lower.contains("sec.phone") ||       // Samsung Phone
                    lower == "android"
         }
     }
@@ -190,6 +199,14 @@ class UssdAccessibilityService : AccessibilityService() {
         }
 
         if (dialogText.isBlank()) return
+
+        // Handle dual-SIM prompt automatically if "Always Ask" is enabled
+        val isSimChooser = lower.contains("sim") && (lower.contains("select") || lower.contains("choose") || lower.contains("dooro") || lower.contains("call with"))
+        if (isSimChooser) {
+            Log.d("UssdAccessibility", "SIM chooser dialog detected! Auto-clicking Somtel/SIM 2...")
+            clickButton(rootNode, listOf("Somtel", "somtel", "SIM 2", "SIM2", "Slot 2", "SIM 2 (Somtel)"))
+            return
+        }
 
         processDialog(rootNode, dialogText)
     }

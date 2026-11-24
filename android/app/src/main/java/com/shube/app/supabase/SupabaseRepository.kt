@@ -73,9 +73,27 @@ object SupabaseRepository {
 
     /**
      * Looks up a customer by the phone number that sent the Hormuud/Somtel payment SMS.
+     * Prioritizes the current operator's scoped customer record first, then falls back to any active match.
      */
-    suspend fun getCustomerBySender(senderPhone: String): Customer? = withContext(Dispatchers.IO) {
+    suspend fun getCustomerBySender(senderPhone: String, profileId: String? = null): Customer? = withContext(Dispatchers.IO) {
         try {
+            // 1. If profileId is known, prioritize this operator's own customer record
+            if (!profileId.isNullOrBlank()) {
+                val opResult = client.postgrest["customers"]
+                    .select {
+                        filter {
+                            eq("telesom_number", senderPhone)
+                            eq("created_by", profileId)
+                            eq("active", true)
+                        }
+                        limit(1)
+                    }
+                    .decodeList<Customer>()
+                val match = opResult.firstOrNull()
+                if (match != null) return@withContext match
+            }
+
+            // 2. Fallback to any active customer with this telesom_number
             val result = client.postgrest["customers"]
                 .select {
                     filter {
