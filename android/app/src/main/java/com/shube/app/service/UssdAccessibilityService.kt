@@ -59,6 +59,9 @@ class UssdAccessibilityService : AccessibilityService() {
         var isServiceActive = false
             private set
 
+        @Volatile
+        private var lastProcessedPromptText: String = ""
+
         /**
          * Starts an active USSD session with the given sequential replies.
          * NO active poller is started — event-driven only (Geesh App architecture).
@@ -68,6 +71,7 @@ class UssdAccessibilityService : AccessibilityService() {
                 replyQueue.clear()
                 replyQueue.addAll(replies.filter { it.isNotBlank() })
             }
+            lastProcessedPromptText = ""
             isProcessingDialog = false
             isUssdSessionActive = true
             Log.d("UssdAccessibility", "USSD Session STARTED with ${replyQueue.size} replies: $replies")
@@ -81,6 +85,7 @@ class UssdAccessibilityService : AccessibilityService() {
             synchronized(replyQueue) {
                 replyQueue.clear()
             }
+            lastProcessedPromptText = ""
             isProcessingDialog = false
             isUssdSessionActive = false
             Log.d("UssdAccessibility", "USSD Session STOPPED")
@@ -158,8 +163,9 @@ class UssdAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         serviceInfo = AccessibilityServiceInfo().apply {
-            // ONLY typeWindowStateChanged — no typeWindowContentChanged (avoids lock-screen clock false triggers)
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            // Listen to both new dialogs and in-place USSD text updates (strictly filtered by isUssdSessionActive + isTelephonyPackage)
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                         AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
@@ -181,8 +187,8 @@ class UssdAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: ""
         if (!isTelephonyPackage(pkg)) return
 
-        // Only process TYPE_WINDOW_STATE_CHANGED (new dialog appeared)
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
 
         if (isProcessingDialog) return
 
@@ -200,6 +206,13 @@ class UssdAccessibilityService : AccessibilityService() {
 
         if (dialogText.isBlank()) return
 
+        // Deduplicate in-place content updates for the exact same dialog prompt
+        val promptText = extractPromptText(rootNode).trim()
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            promptText.isNotEmpty() && promptText == lastProcessedPromptText) {
+            return
+        }
+
         // Handle dual-SIM prompt automatically if "Always Ask" is enabled
         val isSimChooser = lower.contains("sim") && (lower.contains("select") || lower.contains("choose") || lower.contains("dooro") || lower.contains("call with"))
         if (isSimChooser) {
@@ -208,6 +221,9 @@ class UssdAccessibilityService : AccessibilityService() {
             return
         }
 
+        if (promptText.isNotEmpty()) {
+            lastProcessedPromptText = promptText
+        }
         processDialog(rootNode, dialogText)
     }
 
@@ -331,6 +347,17 @@ class UssdAccessibilityService : AccessibilityService() {
         val sb = StringBuilder()
         if (node.text != null) sb.append(node.text).append("\n")
         for (i in 0 until node.childCount) sb.append(extractText(node.getChild(i)))
+        return sb.toString()
+    }
+
+    /** Extracts non-editable prompt text so EditText typing does not look like a new USSD dialog. */
+    private fun extractPromptText(node: AccessibilityNodeInfo?): String {
+        if (node == null) return ""
+        val cls = node.className?.toString() ?: ""
+        if (node.isEditable || cls.contains("EditText", ignoreCase = true)) return ""
+        val sb = StringBuilder()
+        if (node.text != null) sb.append(node.text).append("\n")
+        for (i in 0 until node.childCount) sb.append(extractPromptText(node.getChild(i)))
         return sb.toString()
     }
 

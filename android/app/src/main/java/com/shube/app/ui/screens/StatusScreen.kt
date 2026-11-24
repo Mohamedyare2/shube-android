@@ -2,9 +2,11 @@ package com.shube.app.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shube.app.local.DevicePreferences
 import com.shube.app.network.ApiService
+import com.shube.app.service.GatewayForegroundService
 import com.shube.app.worker.HeartbeatWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -117,8 +120,25 @@ fun StatusScreen(
         )
     }
 
+    fun setGatewayServiceRunning(enabled: Boolean) {
+        try {
+            val intent = Intent(context, GatewayForegroundService::class.java).apply {
+                action = if (enabled) GatewayForegroundService.ACTION_START_GATEWAY else GatewayForegroundService.ACTION_STOP_GATEWAY
+            }
+            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (_: Exception) {}
+    }
+
     LaunchedEffect(deviceId) {
         refreshLocalStatus()
+        if (status.gatewayEnabled) {
+            setGatewayServiceRunning(true)
+            HeartbeatWorker.schedule(context)
+        }
         // Also send an immediate heartbeat on screen open
         scope.launch { api.sendHeartbeat(deviceId) }
         // Refresh display every 30 seconds
@@ -239,6 +259,7 @@ fun StatusScreen(
                                     checked = status.gatewayEnabled,
                                     onCheckedChange = {
                                         status = status.copy(gatewayEnabled = it)
+                                        setGatewayServiceRunning(it)
                                         if (it) HeartbeatWorker.schedule(context)
                                         else HeartbeatWorker.cancel(context)
                                     },
@@ -368,6 +389,7 @@ fun StatusScreen(
             confirmButton = {
                 TextButton(onClick = {
                     prefs.clearPairing()
+                    setGatewayServiceRunning(false)
                     HeartbeatWorker.cancel(context)
                     showUnpairDialog = false
                     onUnpair()

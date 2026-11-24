@@ -82,6 +82,16 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
             putExtra("timestamp", timestamp)
         }
         
-        context.startForegroundService(serviceIntent)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            Log.e("SmsReceiver", "Failed to start GatewayForegroundService from background: ${e.message}", e)
+            // Fallback: try startService if foreground service start was blocked
+            try { context.startService(serviceIntent) } catch (_: Exception) {}
+        }
     }
 }
